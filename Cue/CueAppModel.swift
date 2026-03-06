@@ -67,15 +67,15 @@ final class CueAppModel {
     var menuBarSymbolName: String {
         switch phase {
         case .recording:
-            return "mic.circle.fill"
+            return "waveform.circle.fill"
         case .transcribing:
             return "waveform.badge.magnifyingglass"
         case .pasting:
-            return "doc.on.clipboard.fill"
+            return "waveform.badge.plus"
         case .error:
-            return "exclamationmark.circle.fill"
+            return "waveform.badge.exclamationmark"
         case .idle:
-            return isModelReady ? "mic" : "ellipsis.circle"
+            return isModelReady ? "waveform" : "waveform.circle"
         }
     }
 
