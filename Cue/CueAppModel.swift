@@ -14,8 +14,6 @@ final class CueAppModel {
     private let transcriptionService: TranscriptionService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "AppModel")
 
-    private var recordingLimitTask: Task<Void, Never>?
-
     init(
         transcriptionService: TranscriptionService? = nil
     ) {
@@ -108,7 +106,6 @@ final class CueAppModel {
         do {
             try await transcriptionService.startRecording()
             phase = .recording
-            scheduleRecordingLimit()
         } catch {
             present(error)
         }
@@ -118,9 +115,6 @@ final class CueAppModel {
         guard phase == .recording else {
             return
         }
-
-        recordingLimitTask?.cancel()
-        recordingLimitTask = nil
 
         phase = .transcribing
         errorMessage = nil
@@ -148,23 +142,7 @@ final class CueAppModel {
         }
     }
 
-    private func scheduleRecordingLimit() {
-        recordingLimitTask?.cancel()
-        recordingLimitTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(CueAppConfiguration.maximumRecordingDuration))
-
-            guard !Task.isCancelled else {
-                return
-            }
-
-            await self?.stopRecording()
-        }
-    }
-
     private func present(_ error: Error) {
-        recordingLimitTask?.cancel()
-        recordingLimitTask = nil
-
         let message: String
         if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
             message = description

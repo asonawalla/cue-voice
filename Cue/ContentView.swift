@@ -149,7 +149,7 @@ struct ContentView: View {
             .tint(accent)
             .disabled(model.primaryButtonDisabled)
 
-            Text("Recording auto-stops after \(Int(CueAppConfiguration.maximumRecordingDuration))s.")
+            Text("Click Stop Recording when you're done.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
         }
