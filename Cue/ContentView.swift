@@ -1,7 +1,9 @@
+import KeyboardShortcuts
 import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: CueAppModel
+    @Bindable var hotkeyManager: CueHotkeyManager
     
     private let ink = Color(red: 0.12, green: 0.17, blue: 0.25)
     private let slate = Color(red: 0.34, green: 0.40, blue: 0.50)
@@ -24,6 +26,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 statusCard
+                shortcutCard
                 transcriptCard
                 metricsCard
 
@@ -35,9 +38,6 @@ struct ContentView: View {
             }
             .padding(28)
         }
-        .task {
-            await model.bootstrap()
-        }
     }
 
     private var header: some View {
@@ -46,7 +46,7 @@ struct ContentView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(ink)
 
-            Text("Local speech-to-text spike for the base.en WhisperKit model.")
+            Text("Menu bar push-to-talk prototype backed by the base.en WhisperKit model.")
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(slate)
         }
@@ -62,10 +62,39 @@ struct ContentView: View {
             if let progressValue = model.modelStatus.progressValue {
                 ProgressView(value: progressValue)
                     .tint(accent)
-            } else if model.phase == .preparingModel {
+            } else if model.isModelPreparing {
                 ProgressView()
                     .controlSize(.small)
                     .tint(accent)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
+
+    private var shortcutCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Push to Talk")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(ink)
+
+            KeyboardShortcuts.Recorder("Global shortcut", name: .pushToTalk) { shortcut in
+                hotkeyManager.updateShortcutSummary(shortcut)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    hotkeyManager.hasConfiguredShortcut
+                        ? "Hold \(hotkeyManager.shortcutSummary) in any app to record, then release to transcribe."
+                        : "Set a standard key combination to enable global push-to-talk."
+                )
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(slate)
+
+                Text("Bare Fn/Globe is not supported by the current global hotkey API, so use a normal shortcut chord.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(muted)
             }
         }
         .padding(20)
@@ -140,16 +169,17 @@ struct ContentView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
-            Button(model.primaryButtonTitle) {
-                Task {
-                    await model.handlePrimaryAction()
+            if model.shouldOfferModelRetry {
+                Button("Retry Model Preparation") {
+                    Task {
+                        await model.retryModelPreparation()
+                    }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(accent)
-            .disabled(model.primaryButtonDisabled)
 
-            Text("Click Stop Recording when you're done.")
+            Text("Cue runs from the menu bar. Open this window when you want visibility into state, errors, and timing.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
         }

@@ -2,24 +2,18 @@ import Foundation
 
 enum CuePhase: String, Equatable {
     case idle
-    case preparingModel
     case recording
     case transcribing
-    case completed
     case error
 
     var title: String {
         switch self {
         case .idle:
             return "Idle"
-        case .preparingModel:
-            return "Preparing Model"
         case .recording:
             return "Recording"
         case .transcribing:
             return "Transcribing"
-        case .completed:
-            return "Completed"
         case .error:
             return "Error"
         }
@@ -60,6 +54,15 @@ enum ModelPreparationStatus: Equatable {
         }
 
         return progress
+    }
+
+    var isPreparing: Bool {
+        switch self {
+        case .checkingCache, .downloading, .loading:
+            return true
+        case .idle, .ready, .failed:
+            return false
+        }
     }
 
     var isReady: Bool {

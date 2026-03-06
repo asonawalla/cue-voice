@@ -4,11 +4,11 @@ import Testing
 
 @MainActor
 struct CueTests {
-    @Test func prepareModelTransitionsBackToIdleWhenReady() async throws {
+    @Test func launchWarmsTheModelWithoutLeavingIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let model = CueAppModel(transcriptionService: transcriptionService)
 
-        await model.prepareModel()
+        await model.launch()
 
         #expect(transcriptionService.prepareCallCount == 1)
         #expect(model.phase == .idle)
@@ -16,10 +16,21 @@ struct CueTests {
         #expect(model.errorMessage == nil)
     }
 
-    @Test func stopRecordingStoresTranscriptAndMetrics() async throws {
+    @Test func handlePushToTalkPressedStartsRecordingWhenModelIsReady() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let model = CueAppModel(transcriptionService: transcriptionService)
+
+        await model.launch()
+        await model.handlePushToTalkPressed()
+
+        #expect(model.phase == .recording)
+        #expect(transcriptionService.startRecordingCallCount == 1)
+    }
+
+    @Test func handlePushToTalkReleasedStoresTranscriptAndReturnsToIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         transcriptionService.result = CueTranscriptionResult(
-            text: "phase one transcript",
+            text: "milestone two transcript",
             language: "en",
             recordingDuration: 2.0,
             modelLoadDuration: 0.25,
@@ -27,12 +38,12 @@ struct CueTests {
         )
         let model = CueAppModel(transcriptionService: transcriptionService)
 
-        await model.prepareModel()
-        await model.startRecording()
-        await model.stopRecording()
+        await model.launch()
+        await model.handlePushToTalkPressed()
+        await model.handlePushToTalkReleased()
 
-        #expect(model.phase == .completed)
-        #expect(model.transcript == "phase one transcript")
+        #expect(model.phase == .idle)
+        #expect(model.transcript == "milestone two transcript")
         #expect(model.latencyMetrics != nil)
         #expect(model.latencyMetrics?.recordingDuration == 2.0)
         #expect(model.latencyMetrics?.totalDuration ?? 0 >= 2.0)
@@ -40,16 +51,27 @@ struct CueTests {
         #expect(transcriptionService.stopRecordingCallCount == 1)
     }
 
-    @Test func prepareModelFailureMovesStateToError() async throws {
+    @Test func launchFailureMovesStateToError() async throws {
         let transcriptionService = FakeTranscriptionService()
         transcriptionService.prepareError = CueError.modelDownloadFailed("offline")
 
         let model = CueAppModel(transcriptionService: transcriptionService)
 
-        await model.prepareModel()
+        await model.launch()
 
         #expect(model.phase == .error)
         #expect(model.errorMessage == "Cue could not prepare the base.en model: offline")
+    }
+
+    @Test func pushToTalkPressDoesNothingBeforeModelIsReady() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let model = CueAppModel(transcriptionService: transcriptionService)
+
+        await model.handlePushToTalkPressed()
+
+        #expect(model.phase == .idle)
+        #expect(transcriptionService.startRecordingCallCount == 0)
+        #expect(transcriptionService.prepareCallCount == 0)
     }
 }
 
@@ -62,7 +84,7 @@ private final class FakeTranscriptionService: TranscriptionService {
     var stopRecordingCallCount = 0
     var prepareError: Error?
     var result = CueTranscriptionResult(
-        text: "phase one transcript",
+        text: "milestone two transcript",
         language: "en",
         recordingDuration: 1.5,
         modelLoadDuration: 0.25,

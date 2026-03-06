@@ -13,6 +13,8 @@ final class CueAppModel {
 
     private let transcriptionService: TranscriptionService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "AppModel")
+    private var hasLaunched = false
+    private var isPreparingModel = false
 
     init(
         transcriptionService: TranscriptionService? = nil
@@ -24,8 +26,8 @@ final class CueAppModel {
         }
     }
 
-    var isBusy: Bool {
-        phase == .preparingModel || phase == .transcribing
+    var isTranscribing: Bool {
+        phase == .transcribing
     }
 
     var isRecording: Bool {
@@ -36,72 +38,100 @@ final class CueAppModel {
         modelStatus.isReady
     }
 
-    var primaryButtonTitle: String {
+    var isModelPreparing: Bool {
+        modelStatus.isPreparing
+    }
+
+    var shouldOfferModelRetry: Bool {
+        !isModelReady && !isModelPreparing
+    }
+
+    var menuBarSymbolName: String {
         switch phase {
-        case .preparingModel:
-            return "Preparing Model..."
         case .recording:
-            return "Stop Recording"
+            return "mic.circle.fill"
         case .transcribing:
-            return "Transcribing..."
+            return "waveform.badge.magnifyingglass"
+        case .error:
+            return "exclamationmark.circle.fill"
+        case .idle:
+            return isModelReady ? "mic" : "ellipsis.circle"
+        }
+    }
+
+    var menuBarPrimaryStatus: String {
+        switch phase {
+        case .idle:
+            return isModelReady ? "Ready" : "Preparing Model"
         default:
-            return isModelReady ? "Start Recording" : "Prepare Model"
+            return phase.title
         }
     }
 
-    var primaryButtonDisabled: Bool {
-        phase == .preparingModel || phase == .transcribing
+    var menuBarSecondaryStatus: String? {
+        switch phase {
+        case .recording:
+            return "Release the shortcut to stop recording."
+        case .transcribing:
+            return "WhisperKit is transcribing the latest clip."
+        case .error:
+            return errorMessage
+        case .idle:
+            return isModelReady ? "Hold the push-to-talk shortcut in any app." : modelStatus.title
+        }
     }
 
-    func bootstrap() async {
-        guard !isModelReady, phase == .idle else {
+    func launch() async {
+        guard !hasLaunched else {
             return
         }
 
-        await prepareModel()
+        hasLaunched = true
+        await warmModel()
     }
 
-    func handlePrimaryAction() async {
-        if isRecording {
-            await stopRecording()
-        } else if isModelReady {
-            await startRecording()
-        } else {
-            await prepareModel()
-        }
+    func retryModelPreparation() async {
+        await warmModel()
     }
 
-    func prepareModel() async {
-        guard phase != .preparingModel else {
+    func handlePushToTalkPressed() async {
+        guard phase != .recording, phase != .transcribing else {
             return
         }
 
-        errorMessage = nil
-        phase = .preparingModel
-
-        do {
-            try await transcriptionService.prepareModel()
-            phase = transcript.isEmpty ? .idle : .completed
-        } catch {
-            present(error)
+        guard isModelReady else {
+            logger.info("Ignoring push-to-talk press while model status is \(self.modelStatus.title, privacy: .public)")
+            return
         }
+
+        await startRecording()
+    }
+
+    func handlePushToTalkReleased() async {
+        guard phase == .recording else {
+            return
+        }
+
+        await stopRecording()
     }
 
     func startRecording() async {
-        guard !isBusy else {
-            present(CueError.busy)
+        guard phase != .recording else {
+            return
+        }
+
+        guard !isTranscribing else {
+            logger.info("Ignoring record start while transcription is in progress")
+            return
+        }
+
+        guard isModelReady else {
+            logger.info("Ignoring record start because the model is not ready")
             return
         }
 
         errorMessage = nil
         latencyMetrics = nil
-
-        if !isModelReady {
-            await prepareModel()
-            guard isModelReady else {
-                return
-            }
-        }
 
         do {
             try await transcriptionService.startRecording()
@@ -132,11 +162,43 @@ final class CueAppModel {
                 modelLoadDuration: result.modelLoadDuration,
                 backendPipelineDuration: result.pipelineDuration
             )
-            phase = .completed
+            phase = .idle
 
             logger.info(
                 "Completed transcription. record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s total=\((result.recordingDuration + transcriptionDuration), format: .fixed(precision: 2))s"
             )
+        } catch {
+            present(error)
+        }
+    }
+
+    private func warmModel() async {
+        guard !isPreparingModel else {
+            return
+        }
+
+        guard !isModelReady else {
+            if phase == .error {
+                phase = .idle
+                errorMessage = nil
+            }
+            return
+        }
+
+        isPreparingModel = true
+        errorMessage = nil
+
+        defer {
+            isPreparingModel = false
+        }
+
+        do {
+            try await transcriptionService.prepareModel()
+            errorMessage = nil
+
+            if phase == .error {
+                phase = .idle
+            }
         } catch {
             present(error)
         }

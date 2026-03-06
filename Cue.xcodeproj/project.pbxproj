@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */; };
 		9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */,
 				9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -121,6 +123,7 @@
 			);
 			name = Cue;
 			packageProductDependencies = (
+				2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */,
 				9A1B2C3D4E5F60718293A4B4 /* WhisperKit */,
 			);
 			productName = Cue;
@@ -206,6 +209,7 @@
 			mainGroup = 05A71C8A2F5A93C3009A5F0F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -413,8 +417,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Cue records short microphone clips for local transcription.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Cue records microphone audio for local push-to-talk transcription.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -445,8 +450,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Cue records short microphone clips for local transcription.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Cue records microphone audio for local push-to-talk transcription.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -582,6 +588,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.9.4;
+			};
+		};
 		9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -593,6 +607,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
 		9A1B2C3D4E5F60718293A4B4 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */;
