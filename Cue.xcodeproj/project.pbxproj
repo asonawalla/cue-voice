@@ -24,6 +24,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MVP_ROADMAP.md; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4C6 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		05A71C932F5A93C3009A5F0F /* Cue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cue.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A71CA02F5A93C4009A5F0F /* CueTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +77,8 @@
 		05A71C8A2F5A93C3009A5F0F = {
 			isa = PBXGroup;
 			children = (
+				1A2B3C4D5E6F708192A3B4C6 /* README.md */,
+				1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */,
 				05A71C952F5A93C3009A5F0F /* Cue */,
 				05A71CA32F5A93C4009A5F0F /* CueTests */,
 				05A71CAD2F5A93C4009A5F0F /* CueUITests */,
