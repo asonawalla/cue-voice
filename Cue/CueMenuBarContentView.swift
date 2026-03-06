@@ -19,6 +19,13 @@ struct CueMenuBarContentView: View {
             Text(hotkeyManager.shortcutSummary)
         }
 
+        if let insertionResult = model.lastInsertionResult {
+            Section("Last Insertion") {
+                Text(insertionResult.targetAppName)
+                Text(insertionResult.clipboardRestoreOutcome.title)
+            }
+        }
+
         if let errorMessage = model.errorMessage {
             Section("Last Error") {
                 Text(errorMessage)
@@ -36,6 +43,12 @@ struct CueMenuBarContentView: View {
                 Task {
                     await model.retryModelPreparation()
                 }
+            }
+        }
+
+        if model.shouldOfferPastePermissionRecovery {
+            Button("Relaunch Cue") {
+                model.relaunchApplication()
             }
         }
 

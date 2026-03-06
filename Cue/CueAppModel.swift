@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import os
@@ -10,16 +11,21 @@ final class CueAppModel {
     var transcript = ""
     var errorMessage: String?
     var latencyMetrics: LatencyMetrics?
+    var lastInsertionResult: CueInsertionResult?
+    private(set) var lastError: CueError?
 
     private let transcriptionService: TranscriptionService
+    private let insertionService: TextInsertionService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "AppModel")
     private var hasLaunched = false
     private var isPreparingModel = false
 
     init(
-        transcriptionService: TranscriptionService? = nil
+        transcriptionService: TranscriptionService? = nil,
+        insertionService: TextInsertionService? = nil
     ) {
         self.transcriptionService = transcriptionService ?? WhisperKitTranscriptionService()
+        self.insertionService = insertionService ?? PasteboardInsertionService()
 
         self.transcriptionService.statusHandler = { [weak self] status in
             self?.modelStatus = status
@@ -28,6 +34,10 @@ final class CueAppModel {
 
     var isTranscribing: Bool {
         phase == .transcribing
+    }
+
+    var isPasting: Bool {
+        phase == .pasting
     }
 
     var isRecording: Bool {
@@ -46,12 +56,22 @@ final class CueAppModel {
         !isModelReady && !isModelPreparing
     }
 
+    var shouldOfferPastePermissionRecovery: Bool {
+        if case .pastePermissionDenied = lastError {
+            return true
+        }
+
+        return false
+    }
+
     var menuBarSymbolName: String {
         switch phase {
         case .recording:
             return "mic.circle.fill"
         case .transcribing:
             return "waveform.badge.magnifyingglass"
+        case .pasting:
+            return "doc.on.clipboard.fill"
         case .error:
             return "exclamationmark.circle.fill"
         case .idle:
@@ -74,6 +94,8 @@ final class CueAppModel {
             return "Release the shortcut to stop recording."
         case .transcribing:
             return "WhisperKit is transcribing the latest clip."
+        case .pasting:
+            return "Cue is pasting the latest transcript into the frontmost app."
         case .error:
             return errorMessage
         case .idle:
@@ -95,7 +117,7 @@ final class CueAppModel {
     }
 
     func handlePushToTalkPressed() async {
-        guard phase != .recording, phase != .transcribing else {
+        guard phase != .recording, phase != .transcribing, phase != .pasting else {
             return
         }
 
@@ -120,8 +142,8 @@ final class CueAppModel {
             return
         }
 
-        guard !isTranscribing else {
-            logger.info("Ignoring record start while transcription is in progress")
+        guard !isTranscribing, !isPasting else {
+            logger.info("Ignoring record start while Cue is still transcribing or pasting")
             return
         }
 
@@ -131,6 +153,7 @@ final class CueAppModel {
         }
 
         errorMessage = nil
+        lastError = nil
         latencyMetrics = nil
 
         do {
@@ -148,24 +171,31 @@ final class CueAppModel {
 
         phase = .transcribing
         errorMessage = nil
+        lastError = nil
+        latencyMetrics = nil
 
         do {
-            let startedAt = Date()
+            let transcriptionStartedAt = Date()
             let result = try await transcriptionService.stopRecording()
-            let transcriptionDuration = Date().timeIntervalSince(startedAt)
+            let transcriptionDuration = Date().timeIntervalSince(transcriptionStartedAt)
 
             transcript = result.text
+            phase = .pasting
+
+            let insertionResult = try await insertionService.insert(result.text)
+            lastInsertionResult = insertionResult
             latencyMetrics = LatencyMetrics(
                 recordingDuration: result.recordingDuration,
                 transcriptionDuration: transcriptionDuration,
-                totalDuration: result.recordingDuration + transcriptionDuration,
+                pasteDuration: insertionResult.pasteDuration,
+                totalDuration: result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration,
                 modelLoadDuration: result.modelLoadDuration,
                 backendPipelineDuration: result.pipelineDuration
             )
             phase = .idle
 
             logger.info(
-                "Completed transcription. record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s total=\((result.recordingDuration + transcriptionDuration), format: .fixed(precision: 2))s"
+                "Completed transcription and paste. record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s total=\((result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration), format: .fixed(precision: 2))s"
             )
         } catch {
             present(error)
@@ -195,6 +225,7 @@ final class CueAppModel {
         do {
             try await transcriptionService.prepareModel()
             errorMessage = nil
+            lastError = nil
 
             if phase == .error {
                 phase = .idle
@@ -204,8 +235,31 @@ final class CueAppModel {
         }
     }
 
+    func relaunchApplication() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { [logger] _, error in
+            Task { @MainActor in
+                if let error {
+                    logger.error("Failed to relaunch Cue: \(error.localizedDescription, privacy: .public)")
+                    self.present(CueError.pasteFailed("Cue could not relaunch itself. Quit and reopen it manually."))
+                    return
+                }
+
+                NSApplication.shared.terminate(nil)
+            }
+        }
+    }
+
     private func present(_ error: Error) {
         let message: String
+        if let cueError = error as? CueError {
+            lastError = cueError
+        } else {
+            lastError = nil
+        }
+
         if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
             message = description
         } else {

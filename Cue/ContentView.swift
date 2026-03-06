@@ -28,6 +28,7 @@ struct ContentView: View {
                 statusCard
                 shortcutCard
                 transcriptCard
+                insertionCard
                 metricsCard
 
                 if let errorMessage = model.errorMessage {
@@ -46,7 +47,7 @@ struct ContentView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(ink)
 
-            Text("Menu bar push-to-talk prototype backed by the base.en WhisperKit model.")
+            Text("Menu bar push-to-talk prototype that transcribes locally, then pastes into the frontmost app.")
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(slate)
         }
@@ -122,6 +123,37 @@ struct ContentView: View {
         .background(cardBackground)
     }
 
+    private var insertionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Last Insertion")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(ink)
+
+            if let insertionResult = model.lastInsertionResult {
+                HStack {
+                    statusTile(title: "Target App", value: insertionResult.targetAppName)
+                }
+
+                Text(insertionResult.clipboardRestoreOutcome.title)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(slate)
+
+                if let bundleIdentifier = insertionResult.targetBundleIdentifier {
+                    Text(bundleIdentifier)
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(muted)
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text("Finish a successful push-to-talk pass to see where Cue pasted and whether the previous clipboard was restored.")
+                    .foregroundStyle(slate)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
+
     private var metricsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Latency")
@@ -132,6 +164,7 @@ struct ContentView: View {
                 HStack {
                     metricTile(title: "Record", value: metrics.recordingDuration.formattedSeconds)
                     metricTile(title: "Transcribe", value: metrics.transcriptionDuration.formattedSeconds)
+                    metricTile(title: "Paste", value: metrics.pasteDuration.formattedSeconds)
                     metricTile(title: "Total", value: metrics.totalDuration.formattedSeconds)
                 }
 
@@ -179,7 +212,15 @@ struct ContentView: View {
                 .tint(accent)
             }
 
-            Text("Cue runs from the menu bar. Open this window when you want visibility into state, errors, and timing.")
+            if model.shouldOfferPastePermissionRecovery {
+                Button("Relaunch Cue") {
+                    model.relaunchApplication()
+                }
+                .buttonStyle(.bordered)
+                .tint(accent)
+            }
+
+            Text("Cue runs from the menu bar. Open this window when you want visibility into state, paste diagnostics, and timing.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
         }

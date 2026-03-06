@@ -4,6 +4,7 @@ enum CuePhase: String, Equatable {
     case idle
     case recording
     case transcribing
+    case pasting
     case error
 
     var title: String {
@@ -14,6 +15,8 @@ enum CuePhase: String, Equatable {
             return "Recording"
         case .transcribing:
             return "Transcribing"
+        case .pasting:
+            return "Pasting"
         case .error:
             return "Error"
         }
@@ -82,9 +85,37 @@ struct CueTranscriptionResult: Equatable {
     let pipelineDuration: TimeInterval
 }
 
+struct CueInsertionResult: Equatable {
+    let targetAppName: String
+    let targetBundleIdentifier: String?
+    let pasteDuration: TimeInterval
+    let clipboardRestoreOutcome: ClipboardRestoreOutcome
+}
+
+enum ClipboardRestoreOutcome: Equatable {
+    case restored
+    case skippedBecauseClipboardChanged
+    case skippedBecauseSnapshotUnavailable
+    case failed(String)
+
+    var title: String {
+        switch self {
+        case .restored:
+            return "Previous clipboard restored"
+        case .skippedBecauseClipboardChanged:
+            return "Skipped restore because the clipboard changed"
+        case .skippedBecauseSnapshotUnavailable:
+            return "Skipped restore because Cue could not snapshot the clipboard"
+        case .failed(let message):
+            return "Paste succeeded, but clipboard restore failed: \(message)"
+        }
+    }
+}
+
 struct LatencyMetrics: Equatable {
     let recordingDuration: TimeInterval
     let transcriptionDuration: TimeInterval
+    let pasteDuration: TimeInterval
     let totalDuration: TimeInterval
     let modelLoadDuration: TimeInterval
     let backendPipelineDuration: TimeInterval
@@ -101,6 +132,10 @@ enum CueError: LocalizedError {
     case modelDownloadFailed(String)
     case transcriptionFailed(String)
     case emptyTranscript
+    case pastePermissionDenied
+    case noFrontmostApplication
+    case cannotPasteIntoCue
+    case pasteFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -124,6 +159,14 @@ enum CueError: LocalizedError {
             return "Cue could not transcribe the recording: \(message)"
         case .emptyTranscript:
             return "Cue finished transcribing, but the result was empty."
+        case .pastePermissionDenied:
+            return "Cue needs Accessibility permission to paste into other apps. Allow Cue in System Settings > Privacy & Security > Accessibility. If you just enabled it, relaunch Cue before trying again."
+        case .noFrontmostApplication:
+            return "Cue could not determine which app should receive the paste."
+        case .cannotPasteIntoCue:
+            return "Cue can only paste into another app. Focus the destination app, then try again."
+        case .pasteFailed(let message):
+            return "Cue could not paste the transcript: \(message)"
         }
     }
 }
