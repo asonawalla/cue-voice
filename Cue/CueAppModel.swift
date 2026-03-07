@@ -37,6 +37,8 @@ final class CueAppModel {
         self.insertionService = insertionService ?? PasteboardInsertionService()
         self.permissionService = permissionService ?? SystemPermissionService()
         self.notificationCenter = notificationCenter
+        self.permissionSnapshot = self.permissionService.currentPermissionSnapshot()
+        self.hasLoadedPermissionSnapshot = true
 
         self.transcriptionService.statusHandler = { [weak self] status in
             self?.modelStatus = status
@@ -77,6 +79,10 @@ final class CueAppModel {
         hasLoadedPermissionSnapshot && permissionSnapshot.isMicrophoneReady
     }
 
+    var needsPermissionPrompt: Bool {
+        hasLoadedPermissionSnapshot && (!permissionSnapshot.isMicrophoneReady || !permissionSnapshot.canAutoPaste)
+    }
+
     var shouldOfferModelRetry: Bool {
         isReadyToRecord && !isModelReady && !isModelPreparing
     }
@@ -94,7 +100,23 @@ final class CueAppModel {
             return nil
         }
 
-        return "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled."
+        return "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts."
+    }
+
+    var accessibilityRestartMessage: String? {
+        guard hasLoadedPermissionSnapshot else {
+            return nil
+        }
+
+        guard permissionSnapshot.isMicrophoneReady else {
+            return nil
+        }
+
+        guard !permissionSnapshot.canAutoPaste else {
+            return nil
+        }
+
+        return "After you enable Cue in Accessibility settings, restart the app to turn automatic paste on."
     }
 
     var showsAutomaticPasteIndicator: Bool {
@@ -204,13 +226,7 @@ final class CueAppModel {
             return
         }
 
-        await requestAutomaticPastePermissionIfNeeded()
         await warmModel()
-    }
-
-    func requestPastePermission() async {
-        _ = await permissionService.requestPastePermission()
-        refreshPermissionSnapshot()
     }
 
     func openMicrophoneSettings() {
@@ -218,7 +234,12 @@ final class CueAppModel {
     }
 
     func openAccessibilitySettings() {
+        permissionService.requestPastePermission()
         permissionService.openSystemSettings(for: .paste)
+    }
+
+    func restartApplication() {
+        permissionService.restartApplication()
     }
 
     func retryModelPreparation() async {
@@ -423,22 +444,7 @@ final class CueAppModel {
             return
         }
 
-        await requestAutomaticPastePermissionIfNeeded()
         await warmModel()
-    }
-
-    private func requestAutomaticPastePermissionIfNeeded() async {
-        guard permissionSnapshot.isMicrophoneReady else {
-            return
-        }
-
-        guard !permissionSnapshot.canAutoPaste else {
-            return
-        }
-
-        logger.info("Requesting automatic paste access after microphone grant")
-        _ = await permissionService.requestPastePermission()
-        refreshPermissionSnapshot()
     }
 
     private func present(_ error: Error) {

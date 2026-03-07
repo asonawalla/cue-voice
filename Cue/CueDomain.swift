@@ -41,7 +41,7 @@ enum CuePermissionKind: CaseIterable, Equatable {
         case .microphone:
             return "Cue needs microphone access to capture your speech."
         case .paste:
-            return "Cue uses Accessibility to paste automatically into the focused app. If macOS blocks it, Cue falls back to clipboard mode."
+            return "Cue uses Accessibility to paste automatically into the focused app. After you enable it in System Settings, restart Cue to turn automatic paste on."
         }
     }
 
@@ -108,11 +108,11 @@ struct CuePermissionSnapshot: Equatable {
 
     var setupSummary: String {
         guard isMicrophoneReady else {
-            return "Cue needs microphone access before dictation can run. Accessibility powers automatic paste once recording is working."
+            return "Cue needs microphone access before dictation can run. Accessibility is optional and turns on automatic paste after Cue restarts."
         }
 
         guard canAutoPaste else {
-            return "Cue can already record and transcribe. Enable Accessibility if you want automatic paste; until then Cue stays in clipboard mode."
+            return "Cue can already record and transcribe. Enable Accessibility in System Settings, then restart Cue if you want automatic paste; until then Cue stays in clipboard mode."
         }
 
         return "Cue can record, transcribe, and paste automatically."
@@ -229,7 +229,7 @@ enum CueClipboardFallbackReason: Equatable {
     var description: String {
         switch self {
         case .accessibilityPermissionMissing:
-            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste."
+            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste. If you just enabled Accessibility, restart Cue to turn automatic paste on."
         case .noFrontmostApplication:
             return "Cue could not determine a destination app, so it copied the transcript to the clipboard."
         case .targetWasCue:

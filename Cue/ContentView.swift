@@ -79,7 +79,7 @@ struct ContentView: View {
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(slate)
 
-                Text("Cue asks for microphone the first time you dictate. Accessibility stays optional and only affects automatic paste.")
+                Text("Cue checks permissions at launch. Microphone is required for dictation, and Accessibility is optional for automatic paste after Cue restarts.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(muted)
             } else {
@@ -161,23 +161,25 @@ struct ContentView: View {
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
 
-            if !state.isAvailable {
+            if !model.permissionSnapshot.isMicrophoneReady {
+                Text("Finish microphone setup first. Then you can optionally enable Accessibility for automatic paste.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(muted)
+            } else if !state.isAvailable {
                 HStack(spacing: 10) {
-                    Button("Enable Automatic Paste") {
-                        Task {
-                            await model.requestPastePermission()
-                        }
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accent)
 
-                    Button("Open Accessibility Settings") {
-                        model.openAccessibilitySettings()
+                    Button("Restart Cue") {
+                        model.restartApplication()
                     }
                     .buttonStyle(.bordered)
                 }
 
-                Text("Cue still works without this. Until macOS allows post-event access, transcripts stay on the clipboard for manual paste.")
+                Text(model.accessibilityRestartMessage ?? "Cue still works without this. Until Accessibility is enabled and Cue restarts, transcripts stay on the clipboard for manual paste.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(muted)
             } else {
@@ -392,18 +394,22 @@ struct ContentView: View {
 
             if !model.permissionSnapshot.canAutoPaste {
                 HStack(spacing: 10) {
-                    Button("Enable Automatic Paste") {
-                        Task {
-                            await model.requestPastePermission()
-                        }
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accent)
 
-                    Button("Open Accessibility Settings") {
-                        model.openAccessibilitySettings()
+                    Button("Restart Cue") {
+                        model.restartApplication()
                     }
                     .buttonStyle(.bordered)
+                }
+
+                if let accessibilityRestartMessage = model.accessibilityRestartMessage {
+                    Text(accessibilityRestartMessage)
+                        .font(.system(.footnote, design: .rounded))
+                        .foregroundStyle(Color(red: 0.45, green: 0.28, blue: 0.08))
                 }
             }
         }

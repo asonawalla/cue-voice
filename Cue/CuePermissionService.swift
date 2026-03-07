@@ -8,8 +8,9 @@ import os
 protocol PermissionService: AnyObject {
     func currentPermissionSnapshot() -> CuePermissionSnapshot
     func requestMicrophonePermission() async -> CuePermissionState
-    func requestPastePermission() async -> CueAutomationPermissionState
+    func requestPastePermission()
     func openSystemSettings(for permission: CuePermissionKind)
+    func restartApplication()
 }
 
 @MainActor
@@ -42,12 +43,9 @@ final class SystemPermissionService: PermissionService {
         return currentState
     }
 
-    func requestPastePermission() async -> CueAutomationPermissionState {
+    func requestPastePermission() {
         let granted = CGRequestPostEventAccess()
-        let currentState = granted ? CueAutomationPermissionState.available : pastePermissionState
-
-        logger.info("Paste permission result: \(currentState.title, privacy: .public)")
-        return currentState
+        logger.info("Requested automatic paste access; current grant state is \(granted, privacy: .public)")
     }
 
     func openSystemSettings(for permission: CuePermissionKind) {
@@ -65,6 +63,22 @@ final class SystemPermissionService: PermissionService {
         }
 
         logger.error("Failed to open System Settings for \(permission.title, privacy: .public)")
+    }
+
+    func restartApplication() {
+        let bundlePath = Bundle.main.bundlePath
+        let relaunchTask = Process()
+
+        relaunchTask.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunchTask.arguments = ["-c", "sleep 0.3; open \"\(bundlePath)\""]
+
+        do {
+            try relaunchTask.run()
+            logger.info("Scheduled Cue relaunch")
+            NSApplication.shared.terminate(nil)
+        } catch {
+            logger.error("Failed to schedule Cue relaunch: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private var microphonePermissionState: CuePermissionState {

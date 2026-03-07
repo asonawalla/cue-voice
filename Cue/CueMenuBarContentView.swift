@@ -56,6 +56,13 @@ struct CueMenuBarContentView: View {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
 
+        if model.needsPermissionPrompt {
+            Button("Open Setup") {
+                openWindow(id: CueSceneID.permissionsWindow)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+        }
+
         if model.permissionSnapshot.microphone == .notDetermined {
             Button("Grant Microphone Access") {
                 Task {
@@ -76,15 +83,13 @@ struct CueMenuBarContentView: View {
             }
         }
 
-        if !model.permissionSnapshot.canAutoPaste {
-            Button("Enable Automatic Paste") {
-                Task {
-                    await model.requestPastePermission()
-                }
-            }
-
+        if model.permissionSnapshot.isMicrophoneReady && !model.permissionSnapshot.canAutoPaste {
             Button("Open Accessibility Settings") {
                 model.openAccessibilitySettings()
+            }
+
+            Button("Restart Cue") {
+                model.restartApplication()
             }
         }
 

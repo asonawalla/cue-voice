@@ -14,6 +14,10 @@ struct CueApp: App {
         _hotkeyManager = State(initialValue: hotkeyManager)
 
         Task { @MainActor in
+            if model.needsPermissionPrompt {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+
             await model.launch()
         }
     }
@@ -25,6 +29,13 @@ struct CueApp: App {
             CueMenuBarLabelView(model: model)
         }
         .menuBarExtraStyle(.menu)
+
+        Window("Finish Setup", id: CueSceneID.permissionsWindow) {
+            CuePermissionsPromptView(model: model)
+        }
+        .defaultSize(width: 460, height: 420)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(model.needsPermissionPrompt ? .presented : .suppressed)
 
         Window("Cue", id: CueSceneID.mainWindow) {
             ContentView(model: model, hotkeyManager: hotkeyManager)
