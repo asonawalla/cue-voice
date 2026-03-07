@@ -15,27 +15,35 @@ struct CueMenuBarContentView: View {
             }
         }
 
-        Section("Push to Talk") {
-            Text(hotkeyManager.shortcutSummary)
-        }
-
-        if let insertionResult = model.lastInsertionResult {
-            Section("Last Insertion") {
-                Text(insertionResult.targetAppName)
-                Text(insertionResult.clipboardRestoreOutcome.title)
+        if !model.isSetupComplete {
+            Section("Setup") {
+                permissionLine(for: .microphone)
+                permissionLine(for: .paste)
             }
-        }
+        } else {
+            Section("Push to Talk") {
+                Text(hotkeyManager.shortcutSummary)
+            }
 
-        if let errorMessage = model.errorMessage {
-            Section("Last Error") {
-                Text(errorMessage)
+            if let insertionResult = model.lastInsertionResult {
+                Section("Last Insertion") {
+                    Text(insertionResult.targetAppName)
+                    Text(insertionResult.clipboardRestoreOutcome.title)
+                }
+            }
+
+            if let errorMessage = model.errorMessage {
+                Section("Last Error") {
+                    Text(errorMessage)
+                }
             }
         }
 
         Divider()
 
-        Button("Open Debug Window") {
-            openWindow(id: CueSceneID.debugWindow)
+        Button(model.windowButtonTitle) {
+            openWindow(id: CueSceneID.mainWindow)
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
 
         if model.shouldOfferModelRetry {
@@ -56,6 +64,15 @@ struct CueMenuBarContentView: View {
 
         Button("Quit Cue") {
             NSApplication.shared.terminate(nil)
+        }
+    }
+
+    private func permissionLine(for permission: CuePermissionKind) -> some View {
+        HStack {
+            Text(permission.title)
+            Spacer()
+            Text(model.permissionSnapshot.state(for: permission).title)
+                .foregroundStyle(.secondary)
         }
     }
 }

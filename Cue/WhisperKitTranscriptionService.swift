@@ -90,10 +90,6 @@ final class WhisperKitTranscriptionService: TranscriptionService {
             throw CueError.recordingAlreadyInProgress
         }
 
-        guard await AudioProcessor.requestRecordPermission() else {
-            throw CueError.microphonePermissionDenied
-        }
-
         try await prepareModel()
 
         guard let whisperKit else {

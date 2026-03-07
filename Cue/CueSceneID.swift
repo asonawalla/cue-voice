@@ -1,5 +1,5 @@
 import Foundation
 
 enum CueSceneID {
-    static let debugWindow = "cue-debug-window"
+    static let mainWindow = "cue-main-window"
 }

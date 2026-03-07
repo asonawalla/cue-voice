@@ -4,12 +4,14 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var model: CueAppModel
     @Bindable var hotkeyManager: CueHotkeyManager
-    
+
     private let ink = Color(red: 0.12, green: 0.17, blue: 0.25)
     private let slate = Color(red: 0.34, green: 0.40, blue: 0.50)
     private let muted = Color(red: 0.47, green: 0.53, blue: 0.61)
     private let accent = Color(red: 0.16, green: 0.42, blue: 0.66)
     private let cardFill = Color(red: 0.98, green: 0.99, blue: 1.00)
+    private let success = Color(red: 0.15, green: 0.45, blue: 0.27)
+    private let warning = Color(red: 0.74, green: 0.29, blue: 0.08)
 
     var body: some View {
         ZStack {
@@ -23,21 +25,18 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                statusCard
-                shortcutCard
-                transcriptCard
-                insertionCard
-                metricsCard
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
 
-                if let errorMessage = model.errorMessage {
-                    errorCard(message: errorMessage)
+                    if model.shouldShowSetupExperience {
+                        setupContent
+                    } else {
+                        diagnosticsContent
+                    }
                 }
-
-                controls
+                .padding(28)
             }
-            .padding(28)
         }
     }
 
@@ -47,9 +46,185 @@ struct ContentView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(ink)
 
-            Text("Menu bar push-to-talk prototype that transcribes locally, then pastes into the frontmost app.")
+            Text(headerSubtitle)
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(slate)
+        }
+    }
+
+    private var headerSubtitle: String {
+        model.shouldShowSetupExperience
+            ? "Complete macOS permissions here before Cue starts listening and pasting into other apps."
+            : "Menu bar push-to-talk prototype that transcribes locally, then pastes into the frontmost app."
+    }
+
+    private var setupContent: some View {
+        Group {
+            setupOverviewCard
+            permissionCards
+
+            if let errorMessage = model.errorMessage {
+                errorCard(message: errorMessage)
+            }
+
+            setupControls
+        }
+    }
+
+    private var setupOverviewCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Setup Required")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(ink)
+
+            if model.hasLoadedPermissionSnapshot {
+                Text(model.permissionSnapshot.setupSummary)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(slate)
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(accent)
+
+                    Text("Cue is checking the permissions it needs.")
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(slate)
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
+
+    private var permissionCards: some View {
+        HStack(alignment: .top, spacing: 16) {
+            permissionCard(for: .microphone)
+            permissionCard(for: .paste)
+        }
+    }
+
+    private func permissionCard(for permission: CuePermissionKind) -> some View {
+        let state = model.permissionSnapshot.state(for: permission)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(permission.title)
+                        .font(.system(.headline, design: .rounded))
+                        .foregroundStyle(ink)
+
+                    Text(permission.requirementSummary)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(slate)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(state.title)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(state.isGranted ? success : warning)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill((state.isGranted ? success : warning).opacity(0.12))
+                    )
+            }
+
+            Text(permission.systemSettingsPath)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(muted)
+
+            permissionActions(for: permission, state: state)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
+
+    @ViewBuilder
+    private func permissionActions(for permission: CuePermissionKind, state: CuePermissionState) -> some View {
+        switch permission {
+        case .microphone:
+            if state == .notDetermined {
+                Button("Grant Microphone Access") {
+                    Task {
+                        await model.requestMicrophonePermission()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            } else if state == .denied {
+                Button("Open Microphone Settings") {
+                    model.openMicrophoneSettings()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            } else {
+                Text("Cue can use the microphone when you hold the shortcut.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(muted)
+            }
+
+        case .paste:
+            if state != .granted {
+                HStack(spacing: 10) {
+                    Button("Grant Accessibility Access") {
+                        Task {
+                            await model.requestPastePermission()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
+
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Text("After enabling Cue in Accessibility, relaunch Cue to let paste permissions take effect.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(muted)
+            } else {
+                Text("Cue can synthesize Command-V into the focused destination app.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(muted)
+            }
+        }
+    }
+
+    private var setupControls: some View {
+        HStack(spacing: 12) {
+            if model.shouldOfferPastePermissionRecovery {
+                Button("Relaunch Cue") {
+                    model.relaunchApplication()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+
+            Text("Cue stays inactive until both permissions are granted.")
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(muted)
+        }
+    }
+
+    private var diagnosticsContent: some View {
+        Group {
+            statusCard
+            shortcutCard
+            transcriptCard
+            insertionCard
+            metricsCard
+
+            if let errorMessage = model.errorMessage {
+                errorCard(message: errorMessage)
+            }
+
+            diagnosticsControls
         }
     }
 
@@ -200,7 +375,7 @@ struct ContentView: View {
         )
     }
 
-    private var controls: some View {
+    private var diagnosticsControls: some View {
         HStack(spacing: 12) {
             if model.shouldOfferModelRetry {
                 Button("Retry Model Preparation") {

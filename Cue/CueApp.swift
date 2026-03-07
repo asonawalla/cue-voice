@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -21,15 +22,54 @@ struct CueApp: App {
         MenuBarExtra {
             CueMenuBarContentView(model: model, hotkeyManager: hotkeyManager)
         } label: {
-            Image(systemName: model.menuBarSymbolName)
-                .accessibilityLabel(model.menuBarPrimaryStatus)
+            CueMenuBarLabelView(model: model)
         }
         .menuBarExtraStyle(.menu)
 
-        Window("Cue Debug", id: CueSceneID.debugWindow) {
+        Window("Cue", id: CueSceneID.mainWindow) {
             ContentView(model: model, hotkeyManager: hotkeyManager)
                 .frame(minWidth: 760, minHeight: 760)
         }
         .defaultLaunchBehavior(.suppressed)
+    }
+}
+
+private struct CueMenuBarLabelView: View {
+    @Bindable var model: CueAppModel
+    @Environment(\.openWindow) private var openWindow
+    @State private var lastHandledSetupWindowRequest = 0
+
+    var body: some View {
+        Image(systemName: model.menuBarSymbolName)
+            .accessibilityLabel(model.menuBarPrimaryStatus)
+            .task {
+                presentSetupWindowIfNeeded()
+            }
+            .onChange(of: model.setupWindowPresentationToken) { _, _ in
+                presentSetupWindowIfNeeded()
+            }
+    }
+
+    private func presentSetupWindowIfNeeded() {
+        guard model.setupWindowPresentationToken > lastHandledSetupWindowRequest else {
+            return
+        }
+
+        lastHandledSetupWindowRequest = model.setupWindowPresentationToken
+        focusSetupWindow()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusSetupWindow()
+        }
+    }
+
+    private func focusSetupWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openWindow(id: CueSceneID.mainWindow)
+
+        if let cueWindow = NSApplication.shared.windows.first(where: { $0.title == "Cue" }) {
+            cueWindow.makeKeyAndOrderFront(nil)
+            cueWindow.orderFrontRegardless()
+        }
     }
 }

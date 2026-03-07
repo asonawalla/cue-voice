@@ -76,11 +76,7 @@ final class PasteboardInsertionService: TextInsertionService {
     }
 
     private func hasPostEventAccess() -> Bool {
-        if CGPreflightPostEventAccess() {
-            return true
-        }
-
-        let granted = CGRequestPostEventAccess()
+        let granted = CGPreflightPostEventAccess()
         logger.info("Post-event access request result: \(granted, privacy: .public)")
         return granted
     }

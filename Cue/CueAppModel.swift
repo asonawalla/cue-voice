@@ -8,27 +8,49 @@ import os
 final class CueAppModel {
     var phase: CuePhase = .idle
     var modelStatus: ModelPreparationStatus = .idle
+    var permissionSnapshot = CuePermissionSnapshot(microphone: .notDetermined, paste: .notDetermined)
+    var hasLoadedPermissionSnapshot = false
     var transcript = ""
     var errorMessage: String?
     var latencyMetrics: LatencyMetrics?
     var lastInsertionResult: CueInsertionResult?
+    var setupWindowPresentationToken = 0
     private(set) var lastError: CueError?
 
     private let transcriptionService: TranscriptionService
     private let insertionService: TextInsertionService
+    private let permissionService: PermissionService
+    private let notificationCenter: NotificationCenter
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "AppModel")
+
     private var hasLaunched = false
     private var isPreparingModel = false
+    private var didAttemptPastePermissionSetup = false
+    private var activationObserver: NSObjectProtocol?
 
     init(
         transcriptionService: TranscriptionService? = nil,
-        insertionService: TextInsertionService? = nil
+        insertionService: TextInsertionService? = nil,
+        permissionService: PermissionService? = nil,
+        notificationCenter: NotificationCenter = .default
     ) {
         self.transcriptionService = transcriptionService ?? WhisperKitTranscriptionService()
         self.insertionService = insertionService ?? PasteboardInsertionService()
+        self.permissionService = permissionService ?? SystemPermissionService()
+        self.notificationCenter = notificationCenter
 
         self.transcriptionService.statusHandler = { [weak self] status in
             self?.modelStatus = status
+        }
+
+        activationObserver = notificationCenter.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.handleApplicationDidBecomeActive()
+            }
         }
     }
 
@@ -52,8 +74,16 @@ final class CueAppModel {
         modelStatus.isPreparing
     }
 
+    var isSetupComplete: Bool {
+        hasLoadedPermissionSnapshot && permissionSnapshot.isReadyForUse
+    }
+
+    var shouldShowSetupExperience: Bool {
+        !hasLoadedPermissionSnapshot || !isSetupComplete
+    }
+
     var shouldOfferModelRetry: Bool {
-        !isModelReady && !isModelPreparing
+        isSetupComplete && !isModelReady && !isModelPreparing
     }
 
     var shouldOfferPastePermissionRecovery: Bool {
@@ -61,10 +91,22 @@ final class CueAppModel {
             return true
         }
 
-        return false
+        return didAttemptPastePermissionSetup
+    }
+
+    var windowButtonTitle: String {
+        isSetupComplete ? "Open Diagnostics" : "Open Setup"
     }
 
     var menuBarSymbolName: String {
+        guard hasLoadedPermissionSnapshot else {
+            return "waveform.circle"
+        }
+
+        guard isSetupComplete else {
+            return "waveform.badge.exclamationmark"
+        }
+
         switch phase {
         case .recording:
             return "waveform.circle.fill"
@@ -80,6 +122,14 @@ final class CueAppModel {
     }
 
     var menuBarPrimaryStatus: String {
+        guard hasLoadedPermissionSnapshot else {
+            return "Checking Permissions"
+        }
+
+        guard isSetupComplete else {
+            return "Setup Required"
+        }
+
         switch phase {
         case .idle:
             return isModelReady ? "Ready" : "Preparing Model"
@@ -89,6 +139,14 @@ final class CueAppModel {
     }
 
     var menuBarSecondaryStatus: String? {
+        guard hasLoadedPermissionSnapshot else {
+            return "Cue is checking which permissions are available."
+        }
+
+        guard isSetupComplete else {
+            return permissionSnapshot.setupSummary
+        }
+
         switch phase {
         case .recording:
             return "Release the shortcut to stop recording."
@@ -109,7 +167,46 @@ final class CueAppModel {
         }
 
         hasLaunched = true
+        refreshPermissionSnapshot()
+
+        guard isSetupComplete else {
+            requestSetupWindowPresentation()
+            return
+        }
+
         await warmModel()
+    }
+
+    func refreshPermissions() async {
+        refreshPermissionSnapshot()
+
+        guard isSetupComplete else {
+            return
+        }
+
+        await warmModel()
+    }
+
+    func requestMicrophonePermission() async {
+        _ = await permissionService.requestMicrophonePermission()
+        await refreshPermissions()
+        requestSetupWindowPresentation()
+    }
+
+    func requestPastePermission() async {
+        didAttemptPastePermissionSetup = true
+        _ = await permissionService.requestPastePermission()
+        await refreshPermissions()
+        requestSetupWindowPresentation()
+    }
+
+    func openMicrophoneSettings() {
+        permissionService.openSystemSettings(for: .microphone)
+    }
+
+    func openAccessibilitySettings() {
+        didAttemptPastePermissionSetup = true
+        permissionService.openSystemSettings(for: .paste)
     }
 
     func retryModelPreparation() async {
@@ -121,8 +218,21 @@ final class CueAppModel {
             return
         }
 
+        refreshPermissionSnapshot()
+
+        guard isSetupComplete else {
+            logger.info("Ignoring push-to-talk press because setup is incomplete")
+            requestSetupWindowPresentation()
+            return
+        }
+
         guard isModelReady else {
             logger.info("Ignoring push-to-talk press while model status is \(self.modelStatus.title, privacy: .public)")
+
+            if !isModelPreparing {
+                await warmModel()
+            }
+
             return
         }
 
@@ -147,8 +257,19 @@ final class CueAppModel {
             return
         }
 
+        guard isSetupComplete else {
+            logger.info("Ignoring record start because setup is incomplete")
+            requestSetupWindowPresentation()
+            return
+        }
+
         guard isModelReady else {
             logger.info("Ignoring record start because the model is not ready")
+
+            if !isModelPreparing {
+                await warmModel()
+            }
+
             return
         }
 
@@ -202,7 +323,36 @@ final class CueAppModel {
         }
     }
 
+    func relaunchApplication() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { [logger] _, error in
+            Task { @MainActor in
+                if let error {
+                    logger.error("Failed to relaunch Cue: \(error.localizedDescription, privacy: .public)")
+                    self.present(CueError.pasteFailed("Cue could not relaunch itself. Quit and reopen it manually."))
+                    return
+                }
+
+                NSApplication.shared.terminate(nil)
+            }
+        }
+    }
+
+    private func handleApplicationDidBecomeActive() async {
+        guard hasLaunched else {
+            return
+        }
+
+        await refreshPermissions()
+    }
+
     private func warmModel() async {
+        guard isSetupComplete else {
+            return
+        }
+
         guard !isPreparingModel else {
             return
         }
@@ -235,25 +385,37 @@ final class CueAppModel {
         }
     }
 
-    func relaunchApplication() {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
+    private func requestSetupWindowPresentation() {
+        clearPermissionRelatedErrorIfNeeded()
+        setupWindowPresentationToken += 1
+    }
 
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { [logger] _, error in
-            Task { @MainActor in
-                if let error {
-                    logger.error("Failed to relaunch Cue: \(error.localizedDescription, privacy: .public)")
-                    self.present(CueError.pasteFailed("Cue could not relaunch itself. Quit and reopen it manually."))
-                    return
-                }
+    private func refreshPermissionSnapshot() {
+        permissionSnapshot = permissionService.currentPermissionSnapshot()
+        hasLoadedPermissionSnapshot = true
+        clearPermissionRelatedErrorIfNeeded()
+    }
 
-                NSApplication.shared.terminate(nil)
-            }
+    private func clearPermissionRelatedErrorIfNeeded() {
+        guard let lastError, lastError.isPermissionRelated else {
+            return
+        }
+
+        guard !isSetupComplete else {
+            return
+        }
+
+        self.lastError = nil
+        errorMessage = nil
+
+        if phase == .error {
+            phase = .idle
         }
     }
 
     private func present(_ error: Error) {
         let message: String
+
         if let cueError = error as? CueError {
             lastError = cueError
         } else {
@@ -269,5 +431,13 @@ final class CueAppModel {
         errorMessage = message
         phase = .error
         logger.error("\(message, privacy: .public)")
+
+        if let cueError = lastError, cueError.isPermissionRelated {
+            refreshPermissionSnapshot()
+
+            if !isSetupComplete {
+                requestSetupWindowPresentation()
+            }
+        }
     }
 }

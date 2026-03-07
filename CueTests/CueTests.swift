@@ -4,44 +4,148 @@ import Testing
 
 @MainActor
 struct CueTests {
-    @Test func launchWarmsTheModelWithoutLeavingIdle() async throws {
+    @Test func launchWithGrantedPermissionsWarmsTheModelWithoutLeavingIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
 
         #expect(transcriptionService.prepareCallCount == 1)
         #expect(model.phase == .idle)
+        #expect(model.isSetupComplete)
         #expect(model.isModelReady)
         #expect(model.errorMessage == nil)
         #expect(insertionService.insertCallCount == 0)
     }
 
-    @Test func handlePushToTalkPressedStartsRecordingWhenModelIsReady() async throws {
+    @Test func launchWithMissingPermissionsRequestsSetupAndSkipsModelWarmup() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, paste: .denied)
+        )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+
+        #expect(!model.isSetupComplete)
+        #expect(model.shouldShowSetupExperience)
+        #expect(model.setupWindowPresentationToken == 1)
+        #expect(transcriptionService.prepareCallCount == 0)
+        #expect(model.phase == .idle)
+    }
+
+    @Test func pushToTalkWhileBlockedDoesNotStartRecordingAndRequestsSetupWindow() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, paste: .denied)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
         await model.handlePushToTalkPressed()
 
-        #expect(model.phase == .recording)
-        #expect(transcriptionService.startRecordingCallCount == 1)
+        #expect(model.setupWindowPresentationToken == 2)
+        #expect(transcriptionService.startRecordingCallCount == 0)
         #expect(insertionService.insertCallCount == 0)
+        #expect(model.phase == .idle)
+    }
+
+    @Test func grantingFinalMissingPermissionWarmsTheModel() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, paste: .notDetermined)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        permissionService.pasteRequestResult = .granted
+
+        await model.requestPastePermission()
+
+        #expect(permissionService.requestPasteCallCount == 1)
+        #expect(model.isSetupComplete)
+        #expect(transcriptionService.prepareCallCount == 1)
+        #expect(model.isModelReady)
+    }
+
+    @Test func requestingMicrophonePermissionReopensSetupWindow() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, paste: .denied)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        let presentationTokenBeforeRequest = model.setupWindowPresentationToken
+        permissionService.microphoneRequestResult = .granted
+
+        await model.requestMicrophonePermission()
+
+        #expect(permissionService.requestMicrophoneCallCount == 1)
+        #expect(model.setupWindowPresentationToken == presentationTokenBeforeRequest + 1)
+        #expect(!model.isSetupComplete)
+    }
+
+    @Test func requestingPastePermissionShowsRelaunchRecoveryEvenIfAccessStillLooksBlocked() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, paste: .notDetermined)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        permissionService.pasteRequestResult = .denied
+
+        await model.requestPastePermission()
+
+        #expect(permissionService.requestPasteCallCount == 1)
+        #expect(!model.isSetupComplete)
+        #expect(model.shouldOfferPastePermissionRecovery)
     }
 
     @Test func handlePushToTalkReleasedStoresTranscriptPastesAndReturnsToIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
         transcriptionService.result = CueTranscriptionResult(
-            text: "milestone two transcript",
+            text: "milestone three transcript",
             language: "en",
             recordingDuration: 2.0,
             modelLoadDuration: 0.25,
@@ -55,7 +159,9 @@ struct CueTests {
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
@@ -63,7 +169,7 @@ struct CueTests {
         await model.handlePushToTalkReleased()
 
         #expect(model.phase == .idle)
-        #expect(model.transcript == "milestone two transcript")
+        #expect(model.transcript == "milestone three transcript")
         #expect(model.lastInsertionResult == insertionService.result)
         #expect(model.latencyMetrics != nil)
         #expect(model.latencyMetrics?.recordingDuration == 2.0)
@@ -74,14 +180,17 @@ struct CueTests {
         #expect(insertionService.insertCallCount == 1)
     }
 
-    @Test func launchFailureMovesStateToError() async throws {
+    @Test func launchFailureMovesStateToErrorWhenPermissionsAreSatisfied() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
         transcriptionService.prepareError = CueError.modelDownloadFailed("offline")
 
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
@@ -91,29 +200,16 @@ struct CueTests {
         #expect(insertionService.insertCallCount == 0)
     }
 
-    @Test func pushToTalkPressDoesNothingBeforeModelIsReady() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService
-        )
-
-        await model.handlePushToTalkPressed()
-
-        #expect(model.phase == .idle)
-        #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(transcriptionService.prepareCallCount == 0)
-        #expect(insertionService.insertCallCount == 0)
-    }
-
     @Test func pasteFailurePreservesTranscriptAndMovesStateToError() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
         insertionService.insertError = CueError.pastePermissionDenied
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
@@ -122,19 +218,23 @@ struct CueTests {
 
         #expect(model.phase == .error)
         #expect(model.transcript == transcriptionService.result.text)
+        #expect(!model.shouldShowSetupExperience)
         #expect(model.errorMessage == CueError.pastePermissionDenied.errorDescription)
+        #expect(model.lastError == .pastePermissionDenied)
         #expect(model.shouldOfferPastePermissionRecovery)
-        #expect(model.latencyMetrics == nil)
         #expect(insertionService.insertCallCount == 1)
     }
 
     @Test func transcriptionFailureDoesNotAttemptPaste() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
         transcriptionService.stopRecordingError = CueError.transcriptionFailed("backend offline")
         let model = CueAppModel(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
         )
 
         await model.launch()
@@ -157,7 +257,7 @@ private final class FakeTranscriptionService: TranscriptionService {
     var prepareError: Error?
     var stopRecordingError: Error?
     var result = CueTranscriptionResult(
-        text: "milestone two transcript",
+        text: "milestone transcript",
         language: "en",
         recordingDuration: 1.5,
         modelLoadDuration: 0.25,
@@ -208,5 +308,49 @@ private final class FakeTextInsertionService: TextInsertionService {
         }
 
         return result
+    }
+}
+
+@MainActor
+private final class FakePermissionService: PermissionService {
+    var snapshot: CuePermissionSnapshot
+    var currentSnapshotCallCount = 0
+    var requestMicrophoneCallCount = 0
+    var requestPasteCallCount = 0
+    var openedSettingsPermissions: [CuePermissionKind] = []
+    var microphoneRequestResult: CuePermissionState?
+    var pasteRequestResult: CuePermissionState?
+
+    init(snapshot: CuePermissionSnapshot = CuePermissionSnapshot(microphone: .granted, paste: .granted)) {
+        self.snapshot = snapshot
+    }
+
+    func currentPermissionSnapshot() -> CuePermissionSnapshot {
+        currentSnapshotCallCount += 1
+        return snapshot
+    }
+
+    func requestMicrophonePermission() async -> CuePermissionState {
+        requestMicrophoneCallCount += 1
+
+        if let microphoneRequestResult {
+            snapshot = CuePermissionSnapshot(microphone: microphoneRequestResult, paste: snapshot.paste)
+        }
+
+        return snapshot.microphone
+    }
+
+    func requestPastePermission() async -> CuePermissionState {
+        requestPasteCallCount += 1
+
+        if let pasteRequestResult {
+            snapshot = CuePermissionSnapshot(microphone: snapshot.microphone, paste: pasteRequestResult)
+        }
+
+        return snapshot.paste
+    }
+
+    func openSystemSettings(for permission: CuePermissionKind) {
+        openedSettingsPermissions.append(permission)
     }
 }

@@ -23,6 +23,96 @@ enum CuePhase: String, Equatable {
     }
 }
 
+enum CuePermissionKind: CaseIterable, Equatable {
+    case microphone
+    case paste
+
+    var title: String {
+        switch self {
+        case .microphone:
+            return "Microphone"
+        case .paste:
+            return "Accessibility"
+        }
+    }
+
+    var requirementSummary: String {
+        switch self {
+        case .microphone:
+            return "Cue needs microphone access to capture your speech."
+        case .paste:
+            return "Cue needs Accessibility access to send Command-V into other apps."
+        }
+    }
+
+    var systemSettingsPath: String {
+        switch self {
+        case .microphone:
+            return "System Settings > Privacy & Security > Microphone"
+        case .paste:
+            return "System Settings > Privacy & Security > Accessibility"
+        }
+    }
+}
+
+enum CuePermissionState: Equatable {
+    case granted
+    case notDetermined
+    case denied
+
+    var title: String {
+        switch self {
+        case .granted:
+            return "Granted"
+        case .notDetermined:
+            return "Not Yet Granted"
+        case .denied:
+            return "Blocked"
+        }
+    }
+
+    var isGranted: Bool {
+        self == .granted
+    }
+}
+
+struct CuePermissionSnapshot: Equatable {
+    let microphone: CuePermissionState
+    let paste: CuePermissionState
+
+    var isReadyForUse: Bool {
+        microphone.isGranted && paste.isGranted
+    }
+
+    var blockedPermissions: [CuePermissionKind] {
+        CuePermissionKind.allCases.filter { !state(for: $0).isGranted }
+    }
+
+    var setupSummary: String {
+        let blockedTitles = blockedPermissions.map(\.title)
+
+        switch blockedTitles.count {
+        case 0:
+            return "Cue has the permissions it needs."
+        case 1:
+            return "Cue needs \(blockedTitles[0]) access before push-to-talk can run."
+        case 2:
+            return "Cue needs Microphone and Accessibility access before push-to-talk can run."
+        default:
+            return "Cue needs additional permissions before push-to-talk can run."
+        }
+    }
+
+    func state(for permission: CuePermissionKind) -> CuePermissionState {
+        switch permission {
+        case .microphone:
+            return microphone
+        case .paste:
+            return paste
+        }
+    }
+}
+
 enum ModelPreparationStatus: Equatable {
     case idle
     case checkingCache
@@ -121,7 +211,7 @@ struct LatencyMetrics: Equatable {
     let backendPipelineDuration: TimeInterval
 }
 
-enum CueError: LocalizedError {
+enum CueError: LocalizedError, Equatable {
     case busy
     case microphonePermissionDenied
     case missingMicrophoneInput
@@ -137,12 +227,21 @@ enum CueError: LocalizedError {
     case cannotPasteIntoCue
     case pasteFailed(String)
 
+    var isPermissionRelated: Bool {
+        switch self {
+        case .microphonePermissionDenied, .pastePermissionDenied:
+            return true
+        default:
+            return false
+        }
+    }
+
     var errorDescription: String? {
         switch self {
         case .busy:
             return "Cue is already handling another action."
         case .microphonePermissionDenied:
-            return "Microphone access is required before Cue can record audio."
+            return "Cue needs microphone access before it can record audio. Allow Cue in System Settings > Privacy & Security > Microphone."
         case .missingMicrophoneInput:
             return "Cue could not find a usable microphone input device."
         case .recordingFailed(let message):
