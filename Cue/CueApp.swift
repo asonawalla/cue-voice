@@ -36,8 +36,6 @@ struct CueApp: App {
 
 private struct CueMenuBarLabelView: View {
     @Bindable var model: CueAppModel
-    @Environment(\.openWindow) private var openWindow
-    @State private var lastHandledSetupWindowRequest = 0
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -50,35 +48,6 @@ private struct CueMenuBarLabelView: View {
                     .frame(width: 7, height: 7)
                     .offset(x: 3, y: -2)
             }
-        }
-        .task {
-            presentSetupWindowIfNeeded()
-        }
-        .onChange(of: model.setupWindowPresentationToken) { _, _ in
-            presentSetupWindowIfNeeded()
-        }
-    }
-
-    private func presentSetupWindowIfNeeded() {
-        guard model.setupWindowPresentationToken > lastHandledSetupWindowRequest else {
-            return
-        }
-
-        lastHandledSetupWindowRequest = model.setupWindowPresentationToken
-        focusSetupWindow()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            focusSetupWindow()
-        }
-    }
-
-    private func focusSetupWindow() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        openWindow(id: CueSceneID.mainWindow)
-
-        if let cueWindow = NSApplication.shared.windows.first(where: { $0.title == "Cue" }) {
-            cueWindow.makeKeyAndOrderFront(nil)
-            cueWindow.orderFrontRegardless()
         }
     }
 }

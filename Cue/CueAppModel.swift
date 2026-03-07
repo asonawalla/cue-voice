@@ -14,7 +14,6 @@ final class CueAppModel {
     var errorMessage: String?
     var latencyMetrics: LatencyMetrics?
     var lastInsertionResult: CueInsertionResult?
-    var setupWindowPresentationToken = 0
     private(set) var lastError: CueError?
 
     private let transcriptionService: TranscriptionService
@@ -25,8 +24,7 @@ final class CueAppModel {
 
     private var hasLaunched = false
     private var isPreparingModel = false
-    private var hasPresentedSetupForMicrophoneBlock = false
-    private var hasRequestedAutomaticPasteThisSession = false
+    private var isRunningPermissionBootstrap = false
     private var activationObserver: NSObjectProtocol?
 
     init(
@@ -79,10 +77,6 @@ final class CueAppModel {
         hasLoadedPermissionSnapshot && permissionSnapshot.isMicrophoneReady
     }
 
-    var shouldShowSetupExperience: Bool {
-        !hasLoadedPermissionSnapshot || !permissionSnapshot.isMicrophoneReady
-    }
-
     var shouldOfferModelRetry: Bool {
         isReadyToRecord && !isModelReady && !isModelPreparing
     }
@@ -90,11 +84,6 @@ final class CueAppModel {
     var automaticPasteWarningMessage: String? {
         guard hasLoadedPermissionSnapshot else {
             return nil
-        }
-
-        if let lastInsertionResult,
-           case .copiedToClipboard(let reason) = lastInsertionResult.delivery {
-            return reason.description
         }
 
         guard permissionSnapshot.isMicrophoneReady else {
@@ -110,10 +99,6 @@ final class CueAppModel {
 
     var showsAutomaticPasteIndicator: Bool {
         hasLoadedPermissionSnapshot && permissionSnapshot.isMicrophoneReady && !permissionSnapshot.canAutoPaste
-    }
-
-    var windowButtonTitle: String {
-        shouldShowSetupExperience ? "Open Setup" : "Open Diagnostics"
     }
 
     var menuBarSymbolName: String {
@@ -175,7 +160,7 @@ final class CueAppModel {
         case .transcribing:
             return "WhisperKit is transcribing the latest clip."
         case .pasting:
-            return "Cue is pasting the latest transcript into the frontmost app."
+            return "Cue is sending the latest transcript to the frontmost app."
         case .error:
             return errorMessage
         case .idle:
@@ -195,13 +180,9 @@ final class CueAppModel {
         hasLaunched = true
         refreshPermissionSnapshot()
 
-        guard permissionSnapshot.isMicrophoneReady else {
-            presentSetupWindowIfNeeded()
-            return
+        if permissionSnapshot.isMicrophoneReady {
+            await warmModel()
         }
-
-        await requestAutomaticPasteByDefaultIfNeeded()
-        await warmModel()
     }
 
     func refreshPermissions() async {
@@ -216,20 +197,20 @@ final class CueAppModel {
 
     func requestMicrophonePermission() async {
         let result = await permissionService.requestMicrophonePermission()
-        await refreshPermissions()
+        refreshPermissionSnapshot()
 
         if !result.isGranted {
-            requestSetupWindowPresentation()
+            present(CueError.microphonePermissionDenied)
             return
         }
 
-        await requestAutomaticPasteByDefaultIfNeeded()
+        await requestAutomaticPastePermissionIfNeeded()
+        await warmModel()
     }
 
     func requestPastePermission() async {
-        hasRequestedAutomaticPasteThisSession = true
         _ = await permissionService.requestPastePermission()
-        await refreshPermissions()
+        refreshPermissionSnapshot()
     }
 
     func openMicrophoneSettings() {
@@ -245,15 +226,15 @@ final class CueAppModel {
     }
 
     func handlePushToTalkPressed() async {
-        guard phase != .recording, phase != .transcribing, phase != .pasting else {
+        guard phase != .recording, phase != .transcribing, phase != .pasting, !isRunningPermissionBootstrap else {
             return
         }
 
         refreshPermissionSnapshot()
 
         if permissionSnapshot.microphone == .notDetermined {
-            logger.info("Requesting microphone permission on first push-to-talk")
-            await requestMicrophonePermission()
+            await runFirstUsePermissionBootstrap()
+            return
         }
 
         guard permissionSnapshot.isMicrophoneReady else {
@@ -354,7 +335,7 @@ final class CueAppModel {
             phase = .idle
 
             logger.info(
-                "Completed transcription and paste. record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s total=\((result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration), format: .fixed(precision: 2))s"
+                "Completed transcription and insertion. record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s total=\((result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration), format: .fixed(precision: 2))s"
             )
         } catch {
             present(error)
@@ -406,17 +387,11 @@ final class CueAppModel {
         }
     }
 
-    private func requestSetupWindowPresentation() {
-        setupWindowPresentationToken += 1
-    }
-
     private func refreshPermissionSnapshot() {
         permissionSnapshot = permissionService.currentPermissionSnapshot()
         hasLoadedPermissionSnapshot = true
 
         if permissionSnapshot.isMicrophoneReady {
-            hasPresentedSetupForMicrophoneBlock = false
-
             if lastError == .microphonePermissionDenied {
                 lastError = nil
                 errorMessage = nil
@@ -428,7 +403,31 @@ final class CueAppModel {
         }
     }
 
-    private func requestAutomaticPasteByDefaultIfNeeded() async {
+    private func runFirstUsePermissionBootstrap() async {
+        guard !isRunningPermissionBootstrap else {
+            return
+        }
+
+        isRunningPermissionBootstrap = true
+        logger.info("Running first-use permission bootstrap")
+
+        defer {
+            isRunningPermissionBootstrap = false
+        }
+
+        let microphoneState = await permissionService.requestMicrophonePermission()
+        refreshPermissionSnapshot()
+
+        guard microphoneState.isGranted else {
+            present(CueError.microphonePermissionDenied)
+            return
+        }
+
+        await requestAutomaticPastePermissionIfNeeded()
+        await warmModel()
+    }
+
+    private func requestAutomaticPastePermissionIfNeeded() async {
         guard permissionSnapshot.isMicrophoneReady else {
             return
         }
@@ -437,12 +436,7 @@ final class CueAppModel {
             return
         }
 
-        guard !hasRequestedAutomaticPasteThisSession else {
-            return
-        }
-
-        hasRequestedAutomaticPasteThisSession = true
-        logger.info("Requesting automatic paste access as part of default setup")
+        logger.info("Requesting automatic paste access after microphone grant")
         _ = await permissionService.requestPastePermission()
         refreshPermissionSnapshot()
     }
@@ -468,16 +462,6 @@ final class CueAppModel {
 
         if let cueError = lastError, cueError.isPermissionRelated {
             refreshPermissionSnapshot()
-            presentSetupWindowIfNeeded()
         }
-    }
-
-    private func presentSetupWindowIfNeeded() {
-        guard !hasPresentedSetupForMicrophoneBlock else {
-            return
-        }
-
-        hasPresentedSetupForMicrophoneBlock = true
-        requestSetupWindowPresentation()
     }
 }

@@ -44,13 +44,9 @@ final class PasteboardInsertionService: TextInsertionService {
                 )
             }
 
-            let snapshot = PasteboardSnapshot.capture(from: pasteboard)
-            let cueWriteChangeCount: Int
-
             do {
-                cueWriteChangeCount = try writeTranscriptToPasteboard(text)
+                _ = try writeTranscriptToPasteboard(text)
             } catch {
-                _ = restoreSnapshotImmediatelyIfAvailable(snapshot)
                 logger.error("Failed to write transcript to the pasteboard")
                 throw error
             }
@@ -68,23 +64,19 @@ final class PasteboardInsertionService: TextInsertionService {
                 )
             }
 
-            let restoreOutcome = await restorePasteboardIfNeeded(
-                snapshot,
-                expectedCueChangeCount: cueWriteChangeCount
-            )
             let pasteDuration = Date().timeIntervalSince(pasteStartedAt)
             let targetAppName = targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "Unknown App"
 
             logger.info(
-                "Pasted transcript into \(targetAppName, privacy: .public) in \(pasteDuration, format: .fixed(precision: 2))s; restore=\(restoreOutcome.title, privacy: .public)"
+                "Sent paste command to \(targetAppName, privacy: .public) in \(pasteDuration, format: .fixed(precision: 2))s; transcript remains on clipboard"
             )
 
             return CueInsertionResult(
-                delivery: .pasted,
+                delivery: .pasteCommandSent,
                 targetAppName: targetAppName,
                 targetBundleIdentifier: targetApplication.bundleIdentifier,
                 pasteDuration: pasteDuration,
-                clipboardRestoreOutcome: restoreOutcome
+                clipboardRestoreOutcome: .notNeededBecauseTranscriptStayedOnClipboard
             )
         }
     }
@@ -170,97 +162,11 @@ final class PasteboardInsertionService: TextInsertionService {
         commandUp.postToPid(processIdentifier)
     }
 
-    private func restoreSnapshotImmediatelyIfAvailable(_ snapshot: PasteboardSnapshot?) -> Bool {
-        guard let snapshot else {
-            return false
-        }
-
-        return snapshot.restore(to: pasteboard)
-    }
-
-    private func restorePasteboardIfNeeded(
-        _ snapshot: PasteboardSnapshot?,
-        expectedCueChangeCount: Int
-    ) async -> ClipboardRestoreOutcome {
-        guard let snapshot else {
-            return .skippedBecauseSnapshotUnavailable
-        }
-
-        try? await Task.sleep(nanoseconds: CueAppConfiguration.clipboardRestoreDelay.nanoseconds)
-
-        guard pasteboard.changeCount == expectedCueChangeCount else {
-            return .skippedBecauseClipboardChanged
-        }
-
-        guard snapshot.restore(to: pasteboard) else {
-            return .failed("Cue could not write the previous clipboard contents back.")
-        }
-
-        return .restored
-    }
 }
 
 private enum TargetApplicationResolution {
     case target(NSRunningApplication)
     case fallback(CueClipboardFallbackReason)
-}
-
-@MainActor
-private struct PasteboardSnapshot {
-    let items: [PasteboardItemSnapshot]
-
-    static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot? {
-        guard let pasteboardItems = pasteboard.pasteboardItems else {
-            return nil
-        }
-
-        let snapshots = pasteboardItems.map(PasteboardItemSnapshot.init).filter(\.hasData)
-
-        if pasteboardItems.isEmpty || !snapshots.isEmpty {
-            return PasteboardSnapshot(items: snapshots)
-        }
-
-        return nil
-    }
-
-    func restore(to pasteboard: NSPasteboard) -> Bool {
-        pasteboard.clearContents()
-
-        guard !items.isEmpty else {
-            return true
-        }
-
-        return pasteboard.writeObjects(items.map { $0.makePasteboardItem() })
-    }
-}
-
-@MainActor
-private struct PasteboardItemSnapshot {
-    let entries: [(NSPasteboard.PasteboardType, Data)]
-
-    var hasData: Bool {
-        !entries.isEmpty
-    }
-
-    init(item: NSPasteboardItem) {
-        entries = item.types.compactMap { type in
-            guard let data = item.data(forType: type) else {
-                return nil
-            }
-
-            return (type, data)
-        }
-    }
-
-    func makePasteboardItem() -> NSPasteboardItem {
-        let item = NSPasteboardItem()
-
-        for (type, data) in entries {
-            item.setData(data, forType: type)
-        }
-
-        return item
-    }
 }
 
 private extension TimeInterval {

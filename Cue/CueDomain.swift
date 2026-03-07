@@ -112,7 +112,7 @@ struct CuePermissionSnapshot: Equatable {
         }
 
         guard canAutoPaste else {
-            return "Cue can already record and transcribe. Enable Accessibility to finish automatic paste setup; until then Cue stays in clipboard mode."
+            return "Cue can already record and transcribe. Enable Accessibility if you want automatic paste; until then Cue stays in clipboard mode."
         }
 
         return "Cue can record, transcribe, and paste automatically."
@@ -190,13 +190,13 @@ struct CueInsertionResult: Equatable {
 }
 
 enum CueInsertionDelivery: Equatable {
-    case pasted
+    case pasteCommandSent
     case copiedToClipboard(CueClipboardFallbackReason)
 
     var title: String {
         switch self {
-        case .pasted:
-            return "Pasted Automatically"
+        case .pasteCommandSent:
+            return "Paste Command Sent"
         case .copiedToClipboard:
             return "Copied to Clipboard"
         }
@@ -204,15 +204,15 @@ enum CueInsertionDelivery: Equatable {
 
     var detail: String {
         switch self {
-        case .pasted:
-            return "Cue pasted the transcript into the frontmost app."
+        case .pasteCommandSent:
+            return "Cue sent Command-V to the frontmost app and left the transcript on the clipboard in case manual paste is still needed."
         case .copiedToClipboard(let reason):
             return reason.description
         }
     }
 
     var usedAutomaticPaste: Bool {
-        if case .pasted = self {
+        if case .pasteCommandSent = self {
             return true
         }
 
@@ -258,7 +258,7 @@ enum ClipboardRestoreOutcome: Equatable {
         case .notNeededBecauseTranscriptStayedOnClipboard:
             return "Transcript left on the clipboard for manual paste"
         case .failed(let message):
-            return "Paste succeeded, but clipboard restore failed: \(message)"
+            return "Cue could not restore the previous clipboard contents: \(message)"
         }
     }
 }

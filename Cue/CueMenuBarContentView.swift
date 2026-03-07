@@ -15,48 +15,57 @@ struct CueMenuBarContentView: View {
             }
         }
 
-        if !model.isReadyToRecord {
-            Section("Setup") {
-                microphonePermissionLine
-                accessibilityPermissionLine
+        Section("Permissions") {
+            microphonePermissionLine
+            accessibilityPermissionLine
+        }
+
+        if let automationWarningMessage = model.automaticPasteWarningMessage {
+            Section("Automation") {
+                Text(automationWarningMessage)
             }
-        } else {
-            if let automationWarningMessage = model.automaticPasteWarningMessage {
-                Section("Automation") {
-                    Text(automationWarningMessage)
-                    accessibilityPermissionLine
+        }
+
+        Section("Push to Talk") {
+            Text(hotkeyManager.shortcutSummary)
+        }
+
+        if let insertionResult = model.lastInsertionResult {
+            Section("Last Insertion") {
+                Text(insertionResult.delivery.title)
+
+                if let targetAppName = insertionResult.targetAppName {
+                    Text(targetAppName)
                 }
+
+                Text(insertionResult.delivery.detail)
+                Text(insertionResult.clipboardRestoreOutcome.title)
             }
+        }
 
-            Section("Push to Talk") {
-                Text(hotkeyManager.shortcutSummary)
-            }
-
-            if let insertionResult = model.lastInsertionResult {
-                Section("Last Insertion") {
-                    Text(insertionResult.delivery.title)
-
-                    if let targetAppName = insertionResult.targetAppName {
-                        Text(targetAppName)
-                    }
-
-                    Text(insertionResult.delivery.detail)
-                    Text(insertionResult.clipboardRestoreOutcome.title)
-                }
-            }
-
-            if let errorMessage = model.errorMessage {
-                Section("Last Error") {
-                    Text(errorMessage)
-                }
+        if let errorMessage = model.errorMessage {
+            Section("Last Error") {
+                Text(errorMessage)
             }
         }
 
         Divider()
 
-        Button(model.windowButtonTitle) {
+        Button("Open Details") {
             openWindow(id: CueSceneID.mainWindow)
             NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+
+        if model.permissionSnapshot.microphone == .notDetermined {
+            Button("Grant Microphone Access") {
+                Task {
+                    await model.requestMicrophonePermission()
+                }
+            }
+        } else if model.permissionSnapshot.microphone == .denied {
+            Button("Open Microphone Settings") {
+                model.openMicrophoneSettings()
+            }
         }
 
         if model.shouldOfferModelRetry {

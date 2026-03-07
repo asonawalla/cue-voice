@@ -26,7 +26,7 @@ struct CueTests {
         #expect(insertionService.insertCallCount == 0)
     }
 
-    @Test func launchWithMissingMicrophoneRequestsSetupAndSkipsModelWarmup() async throws {
+    @Test func launchWithMissingMicrophoneSkipsModelWarmupAndStaysIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
@@ -42,13 +42,11 @@ struct CueTests {
         await model.launch()
 
         #expect(!model.isReadyToRecord)
-        #expect(model.shouldShowSetupExperience)
-        #expect(model.setupWindowPresentationToken == 1)
         #expect(transcriptionService.prepareCallCount == 0)
         #expect(model.phase == .idle)
     }
 
-    @Test func pushToTalkRequestsMicrophonePermissionWhenUndeterminedAndStartsRecording() async throws {
+    @Test func firstPushToTalkBootstrapsPermissionsAndReturnsToIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
@@ -70,11 +68,37 @@ struct CueTests {
         #expect(permissionService.requestPasteCallCount == 1)
         #expect(model.isReadyToRecord)
         #expect(transcriptionService.prepareCallCount == 1)
+        #expect(transcriptionService.startRecordingCallCount == 0)
+        #expect(model.phase == .idle)
+    }
+
+    @Test func secondPushToTalkStartsRecordingAfterPermissionBootstrap() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, paste: .unavailable)
+        )
+        permissionService.microphoneRequestResult = .granted
+
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        await model.handlePushToTalkPressed()
+        await model.handlePushToTalkPressed()
+
+        #expect(permissionService.requestMicrophoneCallCount == 1)
+        #expect(permissionService.requestPasteCallCount == 1)
+        #expect(transcriptionService.prepareCallCount == 1)
         #expect(transcriptionService.startRecordingCallCount == 1)
         #expect(model.phase == .recording)
     }
 
-    @Test func pushToTalkWithDeniedMicrophoneDoesNotReopenSetupWindowAfterInitialLaunch() async throws {
+    @Test func pushToTalkWithDeniedMicrophoneShowsErrorWithoutStartingRecording() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
@@ -90,7 +114,6 @@ struct CueTests {
         await model.launch()
         await model.handlePushToTalkPressed()
 
-        #expect(model.setupWindowPresentationToken == 1)
         #expect(transcriptionService.startRecordingCallCount == 0)
         #expect(model.phase == .error)
         #expect(model.errorMessage == CueError.microphonePermissionDenied.errorDescription)
@@ -113,8 +136,7 @@ struct CueTests {
         #expect(model.menuBarPrimaryStatus == "Clipboard Mode")
         await model.handlePushToTalkPressed()
 
-        #expect(permissionService.requestPasteCallCount == 1)
-        #expect(model.setupWindowPresentationToken == 0)
+        #expect(permissionService.requestPasteCallCount == 0)
         #expect(transcriptionService.startRecordingCallCount == 1)
         #expect(model.phase == .recording)
         #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled.")
@@ -161,17 +183,25 @@ struct CueTests {
         )
 
         await model.launch()
+        model.lastInsertionResult = CueInsertionResult(
+            delivery: .copiedToClipboard(.accessibilityPermissionMissing),
+            targetAppName: "TextEdit",
+            targetBundleIdentifier: "com.apple.TextEdit",
+            pasteDuration: 0,
+            clipboardRestoreOutcome: .notNeededBecauseTranscriptStayedOnClipboard
+        )
         permissionService.pasteRequestResult = .available
 
         await model.requestPastePermission()
 
-        #expect(permissionService.requestPasteCallCount == 2)
+        #expect(permissionService.requestPasteCallCount == 1)
         #expect(model.isReadyToRecord)
         #expect(model.permissionSnapshot.canAutoPaste)
         #expect(transcriptionService.prepareCallCount == 1)
+        #expect(model.automaticPasteWarningMessage == nil)
     }
 
-    @Test func launchWithPasteUnavailableRequestsAccessibilityByDefaultAndSurfacesClipboardMode() async throws {
+    @Test func launchWithPasteUnavailableWarmsModelWithoutPromptingForAccessibility() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
@@ -186,7 +216,7 @@ struct CueTests {
 
         await model.launch()
 
-        #expect(permissionService.requestPasteCallCount == 1)
+        #expect(permissionService.requestPasteCallCount == 0)
         #expect(model.isReadyToRecord)
         #expect(model.isModelReady)
         #expect(model.menuBarPrimaryStatus == "Clipboard Mode")
@@ -194,7 +224,7 @@ struct CueTests {
         #expect(model.showsAutomaticPasteIndicator)
     }
 
-    @Test func handlePushToTalkReleasedStoresTranscriptAndPastedResult() async throws {
+    @Test func handlePushToTalkReleasedStoresTranscriptAndPasteAttemptResult() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
@@ -206,11 +236,11 @@ struct CueTests {
             pipelineDuration: 0.5
         )
         insertionService.result = CueInsertionResult(
-            delivery: .pasted,
+            delivery: .pasteCommandSent,
             targetAppName: "TextEdit",
             targetBundleIdentifier: "com.apple.TextEdit",
             pasteDuration: 0.18,
-            clipboardRestoreOutcome: .restored
+            clipboardRestoreOutcome: .notNeededBecauseTranscriptStayedOnClipboard
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -263,7 +293,8 @@ struct CueTests {
         #expect(model.transcript == transcriptionService.result.text)
         #expect(model.lastInsertionResult?.delivery == .copiedToClipboard(.accessibilityPermissionMissing))
         #expect(model.errorMessage == nil)
-        #expect(model.automaticPasteWarningMessage == CueClipboardFallbackReason.accessibilityPermissionMissing.description)
+        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled.")
+        #expect(model.lastInsertionResult?.delivery.detail == CueClipboardFallbackReason.accessibilityPermissionMissing.description)
         #expect(insertionService.insertCallCount == 1)
     }
 
@@ -356,11 +387,11 @@ private final class FakeTextInsertionService: TextInsertionService {
     var insertCallCount = 0
     var insertError: Error?
     var result = CueInsertionResult(
-        delivery: .pasted,
+        delivery: .pasteCommandSent,
         targetAppName: "TextEdit",
         targetBundleIdentifier: "com.apple.TextEdit",
         pasteDuration: 0.12,
-        clipboardRestoreOutcome: .restored
+        clipboardRestoreOutcome: .notNeededBecauseTranscriptStayedOnClipboard
     )
 
     func insert(_ text: String) async throws -> CueInsertionResult {
