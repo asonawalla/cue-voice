@@ -8,7 +8,7 @@ import os
 final class CueAppModel {
     var phase: CuePhase = .idle
     var modelStatus: ModelPreparationStatus = .idle
-    var permissionSnapshot = CuePermissionSnapshot(microphone: .notDetermined, paste: .notDetermined)
+    var permissionSnapshot = CuePermissionSnapshot(microphone: .notDetermined, paste: .unavailable)
     var hasLoadedPermissionSnapshot = false
     var transcript = ""
     var errorMessage: String?
@@ -25,7 +25,8 @@ final class CueAppModel {
 
     private var hasLaunched = false
     private var isPreparingModel = false
-    private var didAttemptPastePermissionSetup = false
+    private var hasPresentedSetupForMicrophoneBlock = false
+    private var hasRequestedAutomaticPasteThisSession = false
     private var activationObserver: NSObjectProtocol?
 
     init(
@@ -74,28 +75,45 @@ final class CueAppModel {
         modelStatus.isPreparing
     }
 
-    var isSetupComplete: Bool {
-        hasLoadedPermissionSnapshot && permissionSnapshot.isReadyForUse
+    var isReadyToRecord: Bool {
+        hasLoadedPermissionSnapshot && permissionSnapshot.isMicrophoneReady
     }
 
     var shouldShowSetupExperience: Bool {
-        !hasLoadedPermissionSnapshot || !isSetupComplete
+        !hasLoadedPermissionSnapshot || !permissionSnapshot.isMicrophoneReady
     }
 
     var shouldOfferModelRetry: Bool {
-        isSetupComplete && !isModelReady && !isModelPreparing
+        isReadyToRecord && !isModelReady && !isModelPreparing
     }
 
-    var shouldOfferPastePermissionRecovery: Bool {
-        if case .pastePermissionDenied = lastError {
-            return true
+    var automaticPasteWarningMessage: String? {
+        guard hasLoadedPermissionSnapshot else {
+            return nil
         }
 
-        return didAttemptPastePermissionSetup
+        if let lastInsertionResult,
+           case .copiedToClipboard(let reason) = lastInsertionResult.delivery {
+            return reason.description
+        }
+
+        guard permissionSnapshot.isMicrophoneReady else {
+            return nil
+        }
+
+        guard !permissionSnapshot.canAutoPaste else {
+            return nil
+        }
+
+        return "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled."
+    }
+
+    var showsAutomaticPasteIndicator: Bool {
+        hasLoadedPermissionSnapshot && permissionSnapshot.isMicrophoneReady && !permissionSnapshot.canAutoPaste
     }
 
     var windowButtonTitle: String {
-        isSetupComplete ? "Open Diagnostics" : "Open Setup"
+        shouldShowSetupExperience ? "Open Setup" : "Open Diagnostics"
     }
 
     var menuBarSymbolName: String {
@@ -103,7 +121,7 @@ final class CueAppModel {
             return "waveform.circle"
         }
 
-        guard isSetupComplete else {
+        guard isReadyToRecord else {
             return "waveform.badge.exclamationmark"
         }
 
@@ -126,13 +144,17 @@ final class CueAppModel {
             return "Checking Permissions"
         }
 
-        guard isSetupComplete else {
-            return "Setup Required"
+        guard permissionSnapshot.isMicrophoneReady else {
+            return "Microphone Required"
         }
 
         switch phase {
         case .idle:
-            return isModelReady ? "Ready" : "Preparing Model"
+            guard isModelReady else {
+                return "Preparing Model"
+            }
+
+            return permissionSnapshot.canAutoPaste ? "Ready" : "Clipboard Mode"
         default:
             return phase.title
         }
@@ -143,7 +165,7 @@ final class CueAppModel {
             return "Cue is checking which permissions are available."
         }
 
-        guard isSetupComplete else {
+        guard permissionSnapshot.isMicrophoneReady else {
             return permissionSnapshot.setupSummary
         }
 
@@ -157,7 +179,11 @@ final class CueAppModel {
         case .error:
             return errorMessage
         case .idle:
-            return isModelReady ? "Hold the push-to-talk shortcut in any app." : modelStatus.title
+            guard isModelReady else {
+                return modelStatus.title
+            }
+
+            return automaticPasteWarningMessage ?? "Hold the push-to-talk shortcut in any app."
         }
     }
 
@@ -169,18 +195,19 @@ final class CueAppModel {
         hasLaunched = true
         refreshPermissionSnapshot()
 
-        guard isSetupComplete else {
-            requestSetupWindowPresentation()
+        guard permissionSnapshot.isMicrophoneReady else {
+            presentSetupWindowIfNeeded()
             return
         }
 
+        await requestAutomaticPasteByDefaultIfNeeded()
         await warmModel()
     }
 
     func refreshPermissions() async {
         refreshPermissionSnapshot()
 
-        guard isSetupComplete else {
+        guard permissionSnapshot.isMicrophoneReady else {
             return
         }
 
@@ -188,16 +215,21 @@ final class CueAppModel {
     }
 
     func requestMicrophonePermission() async {
-        _ = await permissionService.requestMicrophonePermission()
+        let result = await permissionService.requestMicrophonePermission()
         await refreshPermissions()
-        requestSetupWindowPresentation()
+
+        if !result.isGranted {
+            requestSetupWindowPresentation()
+            return
+        }
+
+        await requestAutomaticPasteByDefaultIfNeeded()
     }
 
     func requestPastePermission() async {
-        didAttemptPastePermissionSetup = true
+        hasRequestedAutomaticPasteThisSession = true
         _ = await permissionService.requestPastePermission()
         await refreshPermissions()
-        requestSetupWindowPresentation()
     }
 
     func openMicrophoneSettings() {
@@ -205,7 +237,6 @@ final class CueAppModel {
     }
 
     func openAccessibilitySettings() {
-        didAttemptPastePermissionSetup = true
         permissionService.openSystemSettings(for: .paste)
     }
 
@@ -220,9 +251,14 @@ final class CueAppModel {
 
         refreshPermissionSnapshot()
 
-        guard isSetupComplete else {
-            logger.info("Ignoring push-to-talk press because setup is incomplete")
-            requestSetupWindowPresentation()
+        if permissionSnapshot.microphone == .notDetermined {
+            logger.info("Requesting microphone permission on first push-to-talk")
+            await requestMicrophonePermission()
+        }
+
+        guard permissionSnapshot.isMicrophoneReady else {
+            logger.info("Ignoring push-to-talk press because microphone access is unavailable")
+            present(CueError.microphonePermissionDenied)
             return
         }
 
@@ -257,9 +293,11 @@ final class CueAppModel {
             return
         }
 
-        guard isSetupComplete else {
-            logger.info("Ignoring record start because setup is incomplete")
-            requestSetupWindowPresentation()
+        refreshPermissionSnapshot()
+
+        guard permissionSnapshot.isMicrophoneReady else {
+            logger.info("Ignoring record start because microphone access is unavailable")
+            present(CueError.microphonePermissionDenied)
             return
         }
 
@@ -323,23 +361,6 @@ final class CueAppModel {
         }
     }
 
-    func relaunchApplication() {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { [logger] _, error in
-            Task { @MainActor in
-                if let error {
-                    logger.error("Failed to relaunch Cue: \(error.localizedDescription, privacy: .public)")
-                    self.present(CueError.pasteFailed("Cue could not relaunch itself. Quit and reopen it manually."))
-                    return
-                }
-
-                NSApplication.shared.terminate(nil)
-            }
-        }
-    }
-
     private func handleApplicationDidBecomeActive() async {
         guard hasLaunched else {
             return
@@ -349,7 +370,7 @@ final class CueAppModel {
     }
 
     private func warmModel() async {
-        guard isSetupComplete else {
+        guard permissionSnapshot.isMicrophoneReady else {
             return
         }
 
@@ -386,31 +407,44 @@ final class CueAppModel {
     }
 
     private func requestSetupWindowPresentation() {
-        clearPermissionRelatedErrorIfNeeded()
         setupWindowPresentationToken += 1
     }
 
     private func refreshPermissionSnapshot() {
         permissionSnapshot = permissionService.currentPermissionSnapshot()
         hasLoadedPermissionSnapshot = true
-        clearPermissionRelatedErrorIfNeeded()
+
+        if permissionSnapshot.isMicrophoneReady {
+            hasPresentedSetupForMicrophoneBlock = false
+
+            if lastError == .microphonePermissionDenied {
+                lastError = nil
+                errorMessage = nil
+
+                if phase == .error {
+                    phase = .idle
+                }
+            }
+        }
     }
 
-    private func clearPermissionRelatedErrorIfNeeded() {
-        guard let lastError, lastError.isPermissionRelated else {
+    private func requestAutomaticPasteByDefaultIfNeeded() async {
+        guard permissionSnapshot.isMicrophoneReady else {
             return
         }
 
-        guard !isSetupComplete else {
+        guard !permissionSnapshot.canAutoPaste else {
             return
         }
 
-        self.lastError = nil
-        errorMessage = nil
-
-        if phase == .error {
-            phase = .idle
+        guard !hasRequestedAutomaticPasteThisSession else {
+            return
         }
+
+        hasRequestedAutomaticPasteThisSession = true
+        logger.info("Requesting automatic paste access as part of default setup")
+        _ = await permissionService.requestPastePermission()
+        refreshPermissionSnapshot()
     }
 
     private func present(_ error: Error) {
@@ -434,10 +468,16 @@ final class CueAppModel {
 
         if let cueError = lastError, cueError.isPermissionRelated {
             refreshPermissionSnapshot()
-
-            if !isSetupComplete {
-                requestSetupWindowPresentation()
-            }
+            presentSetupWindowIfNeeded()
         }
+    }
+
+    private func presentSetupWindowIfNeeded() {
+        guard !hasPresentedSetupForMicrophoneBlock else {
+            return
+        }
+
+        hasPresentedSetupForMicrophoneBlock = true
+        requestSetupWindowPresentation()
     }
 }

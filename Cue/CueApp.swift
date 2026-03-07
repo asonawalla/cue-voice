@@ -40,14 +40,23 @@ private struct CueMenuBarLabelView: View {
     @State private var lastHandledSetupWindowRequest = 0
 
     var body: some View {
-        Image(systemName: model.menuBarSymbolName)
-            .accessibilityLabel(model.menuBarPrimaryStatus)
-            .task {
-                presentSetupWindowIfNeeded()
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: model.menuBarSymbolName)
+                .accessibilityLabel(model.menuBarPrimaryStatus)
+
+            if model.showsAutomaticPasteIndicator {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 7, height: 7)
+                    .offset(x: 3, y: -2)
             }
-            .onChange(of: model.setupWindowPresentationToken) { _, _ in
-                presentSetupWindowIfNeeded()
-            }
+        }
+        .task {
+            presentSetupWindowIfNeeded()
+        }
+        .onChange(of: model.setupWindowPresentationToken) { _, _ in
+            presentSetupWindowIfNeeded()
+        }
     }
 
     private func presentSetupWindowIfNeeded() {

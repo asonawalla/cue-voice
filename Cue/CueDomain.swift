@@ -41,7 +41,7 @@ enum CuePermissionKind: CaseIterable, Equatable {
         case .microphone:
             return "Cue needs microphone access to capture your speech."
         case .paste:
-            return "Cue needs Accessibility access to send Command-V into other apps."
+            return "Cue uses Accessibility to paste automatically into the focused app. If macOS blocks it, Cue falls back to clipboard mode."
         }
     }
 
@@ -76,40 +76,46 @@ enum CuePermissionState: Equatable {
     }
 }
 
-struct CuePermissionSnapshot: Equatable {
-    let microphone: CuePermissionState
-    let paste: CuePermissionState
+enum CueAutomationPermissionState: Equatable {
+    case available
+    case unavailable
 
-    var isReadyForUse: Bool {
-        microphone.isGranted && paste.isGranted
+    var title: String {
+        switch self {
+        case .available:
+            return "Ready"
+        case .unavailable:
+            return "Clipboard Mode"
+        }
     }
 
-    var blockedPermissions: [CuePermissionKind] {
-        CuePermissionKind.allCases.filter { !state(for: $0).isGranted }
+    var isAvailable: Bool {
+        self == .available
+    }
+}
+
+struct CuePermissionSnapshot: Equatable {
+    let microphone: CuePermissionState
+    let paste: CueAutomationPermissionState
+
+    var isMicrophoneReady: Bool {
+        microphone.isGranted
+    }
+
+    var canAutoPaste: Bool {
+        paste.isAvailable
     }
 
     var setupSummary: String {
-        let blockedTitles = blockedPermissions.map(\.title)
-
-        switch blockedTitles.count {
-        case 0:
-            return "Cue has the permissions it needs."
-        case 1:
-            return "Cue needs \(blockedTitles[0]) access before push-to-talk can run."
-        case 2:
-            return "Cue needs Microphone and Accessibility access before push-to-talk can run."
-        default:
-            return "Cue needs additional permissions before push-to-talk can run."
+        guard isMicrophoneReady else {
+            return "Cue needs microphone access before dictation can run. Accessibility powers automatic paste once recording is working."
         }
-    }
 
-    func state(for permission: CuePermissionKind) -> CuePermissionState {
-        switch permission {
-        case .microphone:
-            return microphone
-        case .paste:
-            return paste
+        guard canAutoPaste else {
+            return "Cue can already record and transcribe. Enable Accessibility to finish automatic paste setup; until then Cue stays in clipboard mode."
         }
+
+        return "Cue can record, transcribe, and paste automatically."
     }
 }
 
@@ -176,16 +182,69 @@ struct CueTranscriptionResult: Equatable {
 }
 
 struct CueInsertionResult: Equatable {
-    let targetAppName: String
+    let delivery: CueInsertionDelivery
+    let targetAppName: String?
     let targetBundleIdentifier: String?
     let pasteDuration: TimeInterval
     let clipboardRestoreOutcome: ClipboardRestoreOutcome
+}
+
+enum CueInsertionDelivery: Equatable {
+    case pasted
+    case copiedToClipboard(CueClipboardFallbackReason)
+
+    var title: String {
+        switch self {
+        case .pasted:
+            return "Pasted Automatically"
+        case .copiedToClipboard:
+            return "Copied to Clipboard"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .pasted:
+            return "Cue pasted the transcript into the frontmost app."
+        case .copiedToClipboard(let reason):
+            return reason.description
+        }
+    }
+
+    var usedAutomaticPaste: Bool {
+        if case .pasted = self {
+            return true
+        }
+
+        return false
+    }
+}
+
+enum CueClipboardFallbackReason: Equatable {
+    case accessibilityPermissionMissing
+    case noFrontmostApplication
+    case targetWasCue
+    case postEventSubmissionFailed(String)
+
+    var description: String {
+        switch self {
+        case .accessibilityPermissionMissing:
+            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste."
+        case .noFrontmostApplication:
+            return "Cue could not determine a destination app, so it copied the transcript to the clipboard."
+        case .targetWasCue:
+            return "Cue was still frontmost, so it copied the transcript to the clipboard instead of pasting back into itself."
+        case .postEventSubmissionFailed(let message):
+            return "Automatic paste failed (\(message)). Cue left the transcript on the clipboard."
+        }
+    }
 }
 
 enum ClipboardRestoreOutcome: Equatable {
     case restored
     case skippedBecauseClipboardChanged
     case skippedBecauseSnapshotUnavailable
+    case notNeededBecauseTranscriptStayedOnClipboard
     case failed(String)
 
     var title: String {
@@ -196,6 +255,8 @@ enum ClipboardRestoreOutcome: Equatable {
             return "Skipped restore because the clipboard changed"
         case .skippedBecauseSnapshotUnavailable:
             return "Skipped restore because Cue could not snapshot the clipboard"
+        case .notNeededBecauseTranscriptStayedOnClipboard:
+            return "Transcript left on the clipboard for manual paste"
         case .failed(let message):
             return "Paste succeeded, but clipboard restore failed: \(message)"
         }
@@ -222,14 +283,13 @@ enum CueError: LocalizedError, Equatable {
     case modelDownloadFailed(String)
     case transcriptionFailed(String)
     case emptyTranscript
-    case pastePermissionDenied
     case noFrontmostApplication
     case cannotPasteIntoCue
     case pasteFailed(String)
 
     var isPermissionRelated: Bool {
         switch self {
-        case .microphonePermissionDenied, .pastePermissionDenied:
+        case .microphonePermissionDenied:
             return true
         default:
             return false
@@ -258,8 +318,6 @@ enum CueError: LocalizedError, Equatable {
             return "Cue could not transcribe the recording: \(message)"
         case .emptyTranscript:
             return "Cue finished transcribing, but the result was empty."
-        case .pastePermissionDenied:
-            return "Cue needs Accessibility permission to paste into other apps. Allow Cue in System Settings > Privacy & Security > Accessibility. If you just enabled it, relaunch Cue before trying again."
         case .noFrontmostApplication:
             return "Cue could not determine which app should receive the paste."
         case .cannotPasteIntoCue:

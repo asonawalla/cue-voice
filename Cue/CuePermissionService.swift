@@ -8,24 +8,19 @@ import os
 protocol PermissionService: AnyObject {
     func currentPermissionSnapshot() -> CuePermissionSnapshot
     func requestMicrophonePermission() async -> CuePermissionState
-    func requestPastePermission() async -> CuePermissionState
+    func requestPastePermission() async -> CueAutomationPermissionState
     func openSystemSettings(for permission: CuePermissionKind)
 }
 
 @MainActor
 final class SystemPermissionService: PermissionService {
     private let workspace: NSWorkspace
-    private let defaults: UserDefaults
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Permissions")
 
-    private static let pastePermissionRequestedKey = "Cue.pastePermissionRequested"
-
     init(
-        workspace: NSWorkspace = .shared,
-        defaults: UserDefaults = .standard
+        workspace: NSWorkspace = .shared
     ) {
         self.workspace = workspace
-        self.defaults = defaults
     }
 
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
@@ -47,10 +42,9 @@ final class SystemPermissionService: PermissionService {
         return currentState
     }
 
-    func requestPastePermission() async -> CuePermissionState {
-        defaults.set(true, forKey: Self.pastePermissionRequestedKey)
+    func requestPastePermission() async -> CueAutomationPermissionState {
         let granted = CGRequestPostEventAccess()
-        let currentState = granted ? CuePermissionState.granted : pastePermissionState
+        let currentState = granted ? CueAutomationPermissionState.available : pastePermissionState
 
         logger.info("Paste permission result: \(currentState.title, privacy: .public)")
         return currentState
@@ -86,12 +80,8 @@ final class SystemPermissionService: PermissionService {
         }
     }
 
-    private var pastePermissionState: CuePermissionState {
-        if CGPreflightPostEventAccess() {
-            return .granted
-        }
-
-        return defaults.bool(forKey: Self.pastePermissionRequestedKey) ? .denied : .notDetermined
+    private var pastePermissionState: CueAutomationPermissionState {
+        CGPreflightPostEventAccess() ? .available : .unavailable
     }
 }
 

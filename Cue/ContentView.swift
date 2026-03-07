@@ -54,13 +54,16 @@ struct ContentView: View {
 
     private var headerSubtitle: String {
         model.shouldShowSetupExperience
-            ? "Complete macOS permissions here before Cue starts listening and pasting into other apps."
-            : "Menu bar push-to-talk prototype that transcribes locally, then pastes into the frontmost app."
+            ? "Grant microphone access to start dictation. Cue also requests Accessibility by default so transcripts paste automatically."
+            : "Menu bar push-to-talk prototype that transcribes locally and targets automatic paste first, with clipboard fallback when macOS blocks automation."
     }
 
     private var setupContent: some View {
         Group {
             setupOverviewCard
+            if let automationWarningMessage = model.automaticPasteWarningMessage {
+                automationWarningCard(message: automationWarningMessage)
+            }
             permissionCards
 
             if let errorMessage = model.errorMessage {
@@ -100,54 +103,26 @@ struct ContentView: View {
 
     private var permissionCards: some View {
         HStack(alignment: .top, spacing: 16) {
-            permissionCard(for: .microphone)
-            permissionCard(for: .paste)
+            microphoneCard
+            accessibilityCard
         }
     }
 
-    private func permissionCard(for permission: CuePermissionKind) -> some View {
-        let state = model.permissionSnapshot.state(for: permission)
+    private var microphoneCard: some View {
+        let state = model.permissionSnapshot.microphone
 
         return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(permission.title)
-                        .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(ink)
+            cardHeader(
+                title: CuePermissionKind.microphone.title,
+                summary: CuePermissionKind.microphone.requirementSummary,
+                statusTitle: state.title,
+                isPositive: state.isGranted
+            )
 
-                    Text(permission.requirementSummary)
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(slate)
-                }
-
-                Spacer(minLength: 12)
-
-                Text(state.title)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(state.isGranted ? success : warning)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill((state.isGranted ? success : warning).opacity(0.12))
-                    )
-            }
-
-            Text(permission.systemSettingsPath)
+            Text(CuePermissionKind.microphone.systemSettingsPath)
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
 
-            permissionActions(for: permission, state: state)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-    }
-
-    @ViewBuilder
-    private func permissionActions(for permission: CuePermissionKind, state: CuePermissionState) -> some View {
-        switch permission {
-        case .microphone:
             if state == .notDetermined {
                 Button("Grant Microphone Access") {
                     Task {
@@ -163,15 +138,34 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(accent)
             } else {
-                Text("Cue can use the microphone when you hold the shortcut.")
+                Text("Cue can start recording when you hold the shortcut.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(muted)
             }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
 
-        case .paste:
-            if state != .granted {
+    private var accessibilityCard: some View {
+        let state = model.permissionSnapshot.paste
+
+        return VStack(alignment: .leading, spacing: 14) {
+            cardHeader(
+                title: CuePermissionKind.paste.title,
+                summary: CuePermissionKind.paste.requirementSummary,
+                statusTitle: state.title,
+                isPositive: state.isAvailable
+            )
+
+            Text(CuePermissionKind.paste.systemSettingsPath)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(muted)
+
+            if !state.isAvailable {
                 HStack(spacing: 10) {
-                    Button("Grant Accessibility Access") {
+                    Button("Enable Automatic Paste") {
                         Task {
                             await model.requestPastePermission()
                         }
@@ -185,7 +179,7 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                 }
 
-                Text("After enabling Cue in Accessibility, relaunch Cue to let paste permissions take effect.")
+                Text("Cue still works without this. Until macOS allows post-event access, transcripts stay on the clipboard for manual paste.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(muted)
             } else {
@@ -194,26 +188,51 @@ struct ContentView: View {
                     .foregroundStyle(muted)
             }
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
     }
 
     private var setupControls: some View {
         HStack(spacing: 12) {
-            if model.shouldOfferPastePermissionRecovery {
-                Button("Relaunch Cue") {
-                    model.relaunchApplication()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
-            }
-
-            Text("Cue stays inactive until both permissions are granted.")
+            Text("Cue can start dictation as soon as microphone access is granted. Automatic paste is requested by default and stays available once Accessibility is enabled.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(muted)
         }
     }
 
+    private func cardHeader(title: String, summary: String, statusTitle: String, isPositive: Bool) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(ink)
+
+                Text(summary)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(slate)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(statusTitle)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(isPositive ? success : warning)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill((isPositive ? success : warning).opacity(0.12))
+                )
+        }
+    }
+
     private var diagnosticsContent: some View {
         Group {
+            if let automationWarningMessage = model.automaticPasteWarningMessage {
+                automationWarningCard(message: automationWarningMessage)
+            }
+
             statusCard
             shortcutCard
             transcriptCard
@@ -233,6 +252,7 @@ struct ContentView: View {
             HStack {
                 statusTile(title: "Phase", value: model.phase.title)
                 statusTile(title: "Model", value: model.modelStatus.title)
+                statusTile(title: "Auto Paste", value: model.permissionSnapshot.paste.title)
             }
 
             if let progressValue = model.modelStatus.progressValue {
@@ -306,8 +326,19 @@ struct ContentView: View {
 
             if let insertionResult = model.lastInsertionResult {
                 HStack {
-                    statusTile(title: "Target App", value: insertionResult.targetAppName)
+                    statusTile(title: "Delivery", value: insertionResult.delivery.title)
+
+                    if let targetAppName = insertionResult.targetAppName {
+                        statusTile(
+                            title: insertionResult.delivery.usedAutomaticPaste ? "Target App" : "Frontmost App",
+                            value: targetAppName
+                        )
+                    }
                 }
+
+                Text(insertionResult.delivery.detail)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(slate)
 
                 Text(insertionResult.clipboardRestoreOutcome.title)
                     .font(.system(.body, design: .rounded))
@@ -320,7 +351,7 @@ struct ContentView: View {
                         .textSelection(.enabled)
                 }
             } else {
-                Text("Finish a successful push-to-talk pass to see where Cue pasted and whether the previous clipboard was restored.")
+                Text("Finish a push-to-talk pass to see whether Cue pasted automatically or left the transcript on the clipboard.")
                     .foregroundStyle(slate)
             }
         }
@@ -375,6 +406,41 @@ struct ContentView: View {
         )
     }
 
+    private func automationWarningCard(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(model.permissionSnapshot.canAutoPaste ? "Automation Warning" : "Automatic Paste Off")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(Color(red: 0.49, green: 0.25, blue: 0.05))
+
+            Text(message)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(Color(red: 0.38, green: 0.22, blue: 0.07))
+
+            if !model.permissionSnapshot.canAutoPaste {
+                HStack(spacing: 10) {
+                    Button("Enable Automatic Paste") {
+                        Task {
+                            await model.requestPastePermission()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
+
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(red: 0.99, green: 0.95, blue: 0.88))
+        )
+    }
+
     private var diagnosticsControls: some View {
         HStack(spacing: 12) {
             if model.shouldOfferModelRetry {
@@ -387,12 +453,19 @@ struct ContentView: View {
                 .tint(accent)
             }
 
-            if model.shouldOfferPastePermissionRecovery {
-                Button("Relaunch Cue") {
-                    model.relaunchApplication()
+            if !model.permissionSnapshot.canAutoPaste {
+                Button("Enable Automatic Paste") {
+                    Task {
+                        await model.requestPastePermission()
+                    }
                 }
                 .buttonStyle(.bordered)
                 .tint(accent)
+
+                Button("Open Accessibility Settings") {
+                    model.openAccessibilitySettings()
+                }
+                .buttonStyle(.bordered)
             }
 
             Text("Cue runs from the menu bar. Open this window when you want visibility into state, paste diagnostics, and timing.")

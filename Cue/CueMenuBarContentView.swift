@@ -15,19 +15,32 @@ struct CueMenuBarContentView: View {
             }
         }
 
-        if !model.isSetupComplete {
+        if !model.isReadyToRecord {
             Section("Setup") {
-                permissionLine(for: .microphone)
-                permissionLine(for: .paste)
+                microphonePermissionLine
+                accessibilityPermissionLine
             }
         } else {
+            if let automationWarningMessage = model.automaticPasteWarningMessage {
+                Section("Automation") {
+                    Text(automationWarningMessage)
+                    accessibilityPermissionLine
+                }
+            }
+
             Section("Push to Talk") {
                 Text(hotkeyManager.shortcutSummary)
             }
 
             if let insertionResult = model.lastInsertionResult {
                 Section("Last Insertion") {
-                    Text(insertionResult.targetAppName)
+                    Text(insertionResult.delivery.title)
+
+                    if let targetAppName = insertionResult.targetAppName {
+                        Text(targetAppName)
+                    }
+
+                    Text(insertionResult.delivery.detail)
                     Text(insertionResult.clipboardRestoreOutcome.title)
                 }
             }
@@ -54,9 +67,15 @@ struct CueMenuBarContentView: View {
             }
         }
 
-        if model.shouldOfferPastePermissionRecovery {
-            Button("Relaunch Cue") {
-                model.relaunchApplication()
+        if !model.permissionSnapshot.canAutoPaste {
+            Button("Enable Automatic Paste") {
+                Task {
+                    await model.requestPastePermission()
+                }
+            }
+
+            Button("Open Accessibility Settings") {
+                model.openAccessibilitySettings()
             }
         }
 
@@ -67,11 +86,20 @@ struct CueMenuBarContentView: View {
         }
     }
 
-    private func permissionLine(for permission: CuePermissionKind) -> some View {
+    private var microphonePermissionLine: some View {
         HStack {
-            Text(permission.title)
+            Text(CuePermissionKind.microphone.title)
             Spacer()
-            Text(model.permissionSnapshot.state(for: permission).title)
+            Text(model.permissionSnapshot.microphone.title)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var accessibilityPermissionLine: some View {
+        HStack {
+            Text(CuePermissionKind.paste.title)
+            Spacer()
+            Text(model.permissionSnapshot.paste.title)
                 .foregroundStyle(.secondary)
         }
     }
