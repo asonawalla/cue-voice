@@ -7,114 +7,163 @@ struct CueMenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Section {
-            Label(model.menuBarPrimaryStatus, systemImage: model.menuBarSymbolName)
-
-            if let secondaryStatus = model.menuBarSecondaryStatus {
-                Text(secondaryStatus)
-            }
+        Button(action: {}) {
+            Label(menuState.title, systemImage: model.menuBarSymbolName)
         }
-
-        Section("Permissions") {
-            microphonePermissionLine
-            accessibilityPermissionLine
-        }
-
-        if let automationWarningMessage = model.automaticPasteWarningMessage {
-            Section("Automation") {
-                Text(automationWarningMessage)
-            }
-        }
-
-        Section("Push to Talk") {
-            Text(hotkeyManager.shortcutSummary)
-        }
-
-        if let insertionResult = model.lastInsertionResult {
-            Section("Last Insertion") {
-                Text(insertionResult.delivery.title)
-
-                if let targetAppName = insertionResult.targetAppName {
-                    Text(targetAppName)
-                }
-
-                Text(insertionResult.delivery.detail)
-                Text(insertionResult.clipboardRestoreOutcome.title)
-            }
-        }
-
-        if let errorMessage = model.errorMessage {
-            Section("Last Error") {
-                Text(errorMessage)
-            }
-        }
+        .disabled(true)
 
         Divider()
 
-        Button("Open Details") {
+        ForEach(menuActions, id: \.self) { action in
+            Button(action.title) {
+                perform(action)
+            }
+        }
+    }
+
+    private var menuState: MenuState {
+        guard model.hasLoadedPermissionSnapshot else {
+            return .checkingSetup
+        }
+
+        switch model.permissionSnapshot.microphone {
+        case .notDetermined:
+            return .microphoneRequired
+        case .denied:
+            return .microphoneBlocked
+        case .granted:
+            break
+        }
+
+        switch model.phase {
+        case .recording:
+            return .recording
+        case .transcribing:
+            return .transcribing
+        case .pasting:
+            return .sendingTranscript
+        case .error:
+            return .actionFailed
+        case .idle:
+            if case .failed = model.modelStatus {
+                return .actionFailed
+            }
+
+            guard model.isModelReady else {
+                return .preparingModel
+            }
+
+            return model.permissionSnapshot.canAutoPaste ? .ready : .clipboardMode
+        }
+    }
+
+    private var menuActions: [MenuAction] {
+        switch menuState {
+        case .checkingSetup, .preparingModel, .ready, .recording, .transcribing, .sendingTranscript:
+            return [.openCue, .quitCue]
+        case .microphoneRequired:
+            return [.grantMicrophoneAccess, .openCue, .quitCue]
+        case .microphoneBlocked:
+            return [.openMicrophoneSettings, .openCue, .quitCue]
+        case .clipboardMode:
+            return [.openAccessibilitySettings, .restartCue, .openCue, .quitCue]
+        case .actionFailed:
+            if case .failed = model.modelStatus, model.shouldOfferModelRetry {
+                return [.retryModelPreparation, .quitCue]
+            }
+
+            return [.openCue, .quitCue]
+        }
+    }
+
+    private func perform(_ action: MenuAction) {
+        switch action {
+        case .grantMicrophoneAccess:
+            Task {
+                await model.requestMicrophonePermission()
+            }
+        case .openMicrophoneSettings:
+            model.openMicrophoneSettings()
+        case .openAccessibilitySettings:
+            model.openAccessibilitySettings()
+        case .restartCue:
+            model.restartApplication()
+        case .retryModelPreparation:
+            Task {
+                await model.retryModelPreparation()
+            }
+        case .openCue:
             openWindow(id: CueSceneID.mainWindow)
             NSApplication.shared.activate(ignoringOtherApps: true)
-        }
-
-        if model.needsPermissionPrompt {
-            Button("Open Setup") {
-                openWindow(id: CueSceneID.permissionsWindow)
-                NSApplication.shared.activate(ignoringOtherApps: true)
-            }
-        }
-
-        if model.permissionSnapshot.microphone == .notDetermined {
-            Button("Grant Microphone Access") {
-                Task {
-                    await model.requestMicrophonePermission()
-                }
-            }
-        } else if model.permissionSnapshot.microphone == .denied {
-            Button("Open Microphone Settings") {
-                model.openMicrophoneSettings()
-            }
-        }
-
-        if model.shouldOfferModelRetry {
-            Button("Retry Model Preparation") {
-                Task {
-                    await model.retryModelPreparation()
-                }
-            }
-        }
-
-        if model.permissionSnapshot.isMicrophoneReady && !model.permissionSnapshot.canAutoPaste {
-            Button("Open Accessibility Settings") {
-                model.openAccessibilitySettings()
-            }
-
-            Button("Restart Cue") {
-                model.restartApplication()
-            }
-        }
-
-        Divider()
-
-        Button("Quit Cue") {
+        case .quitCue:
             NSApplication.shared.terminate(nil)
         }
     }
+}
 
-    private var microphonePermissionLine: some View {
-        HStack {
-            Text(CuePermissionKind.microphone.title)
-            Spacer()
-            Text(model.permissionSnapshot.microphone.title)
-                .foregroundStyle(.secondary)
+private enum MenuState {
+    case checkingSetup
+    case microphoneRequired
+    case microphoneBlocked
+    case preparingModel
+    case ready
+    case clipboardMode
+    case recording
+    case transcribing
+    case sendingTranscript
+    case actionFailed
+
+    var title: String {
+        switch self {
+        case .checkingSetup:
+            return "Checking Setup"
+        case .microphoneRequired:
+            return "Microphone Required"
+        case .microphoneBlocked:
+            return "Microphone Blocked"
+        case .preparingModel:
+            return "Preparing Model"
+        case .ready:
+            return "Ready"
+        case .clipboardMode:
+            return "Clipboard Mode"
+        case .recording:
+            return "Recording"
+        case .transcribing:
+            return "Transcribing"
+        case .sendingTranscript:
+            return "Sending Transcript"
+        case .actionFailed:
+            return "Action Failed"
         }
     }
+}
 
-    private var accessibilityPermissionLine: some View {
-        HStack {
-            Text(CuePermissionKind.paste.title)
-            Spacer()
-            Text(model.permissionSnapshot.paste.title)
-                .foregroundStyle(.secondary)
+private enum MenuAction: Hashable {
+    case grantMicrophoneAccess
+    case openMicrophoneSettings
+    case openAccessibilitySettings
+    case restartCue
+    case retryModelPreparation
+    case openCue
+    case quitCue
+
+    var title: String {
+        switch self {
+        case .grantMicrophoneAccess:
+            return "Grant Microphone Access"
+        case .openMicrophoneSettings:
+            return "Open Microphone Settings"
+        case .openAccessibilitySettings:
+            return "Open Accessibility Settings"
+        case .restartCue:
+            return "Restart Cue"
+        case .retryModelPreparation:
+            return "Retry Model Preparation"
+        case .openCue:
+            return "Open Cue"
+        case .quitCue:
+            return "Quit Cue"
         }
     }
 }
