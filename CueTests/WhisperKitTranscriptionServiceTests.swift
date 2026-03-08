@@ -1,0 +1,157 @@
+import Foundation
+import Testing
+@testable import Cue
+
+@MainActor
+struct WhisperKitTranscriptionServiceTests {
+    @Test func prepareModelUsesCachedPathWithoutDownloading() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cachedModelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: cachedModelFolder, withIntermediateDirectories: true)
+        defaults.set(cachedModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
+
+        let factory = FakeWhisperKitClientFactory(downloadResult: cachedModelFolder)
+        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        var statuses: [ModelPreparationStatus] = []
+        service.statusHandler = { statuses.append($0) }
+
+        try await service.prepareModel()
+
+        #expect(factory.downloadCallCount == 0)
+        #expect(factory.makeClientCallCount == 1)
+        #expect(statuses == [.checkingCache, .loading, .ready])
+    }
+
+    @Test func prepareModelReportsLoadFailuresSeparatelyFromDownloadFailures() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
+        factory.makeClientError = NSError(domain: "CueTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "bad weights"])
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        await #expect(throws: CueError.modelLoadFailed("bad weights")) {
+            try await service.prepareModel()
+        }
+    }
+
+    @Test func stopRecordingBuildsResultFromClientSegments() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.transcriptions = [
+            WhisperKitTranscriptionSegment(text: "hello ", language: "en", modelLoadDuration: 0.2, pipelineDuration: 0.4),
+            WhisperKitTranscriptionSegment(text: "world", language: "en", modelLoadDuration: 0.4, pipelineDuration: 0.6)
+        ]
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+        let result = try await service.stopRecording()
+
+        #expect(client.startRecordingCallCount == 1)
+        #expect(client.stopRecordingCallCount == 1)
+        #expect(result.text == "hello world")
+        #expect(result.language == "en")
+        #expect(result.modelLoadDuration == 0.4)
+        #expect(result.pipelineDuration == 1.0)
+    }
+
+    @Test func stopRecordingRejectsWhitespaceOnlyTranscript() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.transcriptions = [
+            WhisperKitTranscriptionSegment(text: "   ", language: "en", modelLoadDuration: 0.1, pipelineDuration: 0.2)
+        ]
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+
+        await #expect(throws: CueError.emptyTranscript) {
+            try await service.stopRecording()
+        }
+    }
+}
+
+private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
+    var downloadCallCount = 0
+    var makeClientCallCount = 0
+    var downloadResult: URL
+    var downloadError: Error?
+    var makeClientError: Error?
+    var client: FakeWhisperKitClient
+
+    init(downloadResult: URL, client: FakeWhisperKitClient = FakeWhisperKitClient()) {
+        self.downloadResult = downloadResult
+        self.client = client
+    }
+
+    func downloadModel(
+        variant: String,
+        downloadBase: URL,
+        onProgress: @escaping (Double) -> Void
+    ) async throws -> URL {
+        _ = variant
+        _ = downloadBase
+        downloadCallCount += 1
+        onProgress(0.5)
+
+        if let downloadError {
+            throw downloadError
+        }
+
+        return downloadResult
+    }
+
+    func makeClient(
+        modelID: String,
+        modelDirectory: URL,
+        modelFolder: URL
+    ) async throws -> any WhisperKitClient {
+        _ = modelID
+        _ = modelDirectory
+        _ = modelFolder
+        makeClientCallCount += 1
+
+        if let makeClientError {
+            throw makeClientError
+        }
+
+        return client
+    }
+}
+
+private final class FakeWhisperKitClient: WhisperKitClient {
+    var audioSamples = Array(repeating: Float(0), count: 20_000)
+    var transcriptions: [WhisperKitTranscriptionSegment] = [
+        WhisperKitTranscriptionSegment(text: "hello", language: "en", modelLoadDuration: 0.2, pipelineDuration: 0.4)
+    ]
+    var startRecordingCallCount = 0
+    var stopRecordingCallCount = 0
+    var startRecordingError: Error?
+    var transcribeError: Error?
+
+    func startRecording() throws {
+        startRecordingCallCount += 1
+
+        if let startRecordingError {
+            throw startRecordingError
+        }
+    }
+
+    func stopRecording() {
+        stopRecordingCallCount += 1
+    }
+
+    func transcribe(audioSamples: [Float], language: String) async throws -> [WhisperKitTranscriptionSegment] {
+        _ = audioSamples
+        _ = language
+
+        if let transcribeError {
+            throw transcribeError
+        }
+
+        return transcriptions
+    }
+}

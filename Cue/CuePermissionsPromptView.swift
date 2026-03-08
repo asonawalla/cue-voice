@@ -4,12 +4,6 @@ struct CuePermissionsPromptView: View {
     @Bindable var model: CueAppModel
     @Environment(\.dismiss) private var dismiss
 
-    private let ink = Color(red: 0.12, green: 0.17, blue: 0.25)
-    private let slate = Color(red: 0.34, green: 0.40, blue: 0.50)
-    private let accent = Color(red: 0.16, green: 0.42, blue: 0.66)
-    private let success = Color(red: 0.15, green: 0.45, blue: 0.27)
-    private let warning = Color(red: 0.74, green: 0.29, blue: 0.08)
-
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
@@ -31,17 +25,22 @@ struct CuePermissionsPromptView: View {
                 .shadow(color: Color.black.opacity(0.10), radius: 18, y: 10)
         )
         .padding(20)
+        .accessibilityIdentifier("cue.permissions.root")
+    }
+
+    private var presentation: CueAppPresentation {
+        model.presentation
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Finish Setup")
                 .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             Text("Cue needs microphone access to record. Accessibility is optional for automatic paste and takes effect after Cue restarts.")
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(slate)
+                .foregroundStyle(CueTheme.slate)
         }
     }
 
@@ -54,8 +53,8 @@ struct CuePermissionsPromptView: View {
             )
 
             statusRow(
-                title: CuePermissionKind.paste.title,
-                value: model.permissionSnapshot.paste.title,
+                title: CuePermissionKind.accessibility.title,
+                value: model.permissionSnapshot.accessibility.title,
                 isPositive: model.permissionSnapshot.canAutoPaste
             )
         }
@@ -65,33 +64,21 @@ struct CuePermissionsPromptView: View {
     }
 
     private var microphoneSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let section = presentation.setup.microphone
+
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Microphone")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
-            if model.permissionSnapshot.microphone == .notDetermined {
-                Text("Grant microphone access first so Cue can start recording.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
+            Text(section.detail)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(CueTheme.slate)
 
-                footerButton(title: "Grant Microphone Access") {
-                    Task {
-                        await model.requestMicrophonePermission()
-                    }
+            if let primaryAction = section.primaryAction {
+                footerButton(title: primaryAction.title) {
+                    model.perform(primaryAction)
                 }
-            } else if model.permissionSnapshot.microphone == .denied {
-                Text("Microphone access is blocked. Open System Settings to allow Cue to record.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
-
-                footerButton(title: "Open Microphone Settings") {
-                    model.openMicrophoneSettings()
-                }
-            } else {
-                Text("Microphone is ready. Cue can record on this launch.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
             }
         }
         .padding(16)
@@ -100,41 +87,39 @@ struct CuePermissionsPromptView: View {
     }
 
     private var accessibilitySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let section = presentation.setup.accessibility
+
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Automatic Paste")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
-            if !model.permissionSnapshot.isMicrophoneReady {
-                Text("Finish microphone setup first. Then you can optionally enable Accessibility for automatic paste.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
-            } else if model.permissionSnapshot.canAutoPaste {
-                Text("Accessibility is ready on this launch. Cue can paste automatically into the focused app.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
-            } else {
-                Text(model.accessibilityRestartMessage ?? "Open Accessibility settings, enable Cue, then restart the app to turn automatic paste on.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
+            Text(section.detail)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(CueTheme.slate)
 
+            if let primaryAction = section.primaryAction {
                 HStack(spacing: 10) {
-                    footerButton(title: "Open Accessibility Settings") {
-                        model.openAccessibilitySettings()
+                    footerButton(title: primaryAction.title) {
+                        model.perform(primaryAction)
                     }
 
-                    Button("Restart Cue") {
-                        model.restartApplication()
+                    if let secondaryAction = section.secondaryAction {
+                        Button(secondaryAction.title) {
+                            model.perform(secondaryAction)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                 }
 
-                Button("Continue in Clipboard Mode") {
-                    dismiss()
+                if section.showsClipboardModeDismissal {
+                    Button("Continue in Clipboard Mode") {
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(CueTheme.accent)
                 }
-                .buttonStyle(.plain)
-                .font(.system(.footnote, design: .rounded))
-                .foregroundStyle(accent)
             }
         }
         .padding(16)
@@ -146,18 +131,18 @@ struct CuePermissionsPromptView: View {
         HStack {
             Text(title)
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             Spacer(minLength: 12)
 
             Text(value)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(isPositive ? success : warning)
+                .foregroundStyle(isPositive ? CueTheme.success : CueTheme.warning)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     Capsule(style: .continuous)
-                        .fill((isPositive ? success : warning).opacity(0.12))
+                        .fill((isPositive ? CueTheme.success : CueTheme.warning).opacity(0.12))
                 )
         }
     }
@@ -165,7 +150,7 @@ struct CuePermissionsPromptView: View {
     private func footerButton(title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .buttonStyle(.borderedProminent)
-            .tint(accent)
+            .tint(CueTheme.accent)
     }
 
     private var sectionBackground: some View {

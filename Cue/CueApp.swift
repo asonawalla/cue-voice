@@ -7,14 +7,15 @@ struct CueApp: App {
     @State private var hotkeyManager: CueHotkeyManager
 
     init() {
-        let model = CueAppModel()
-        let hotkeyManager = CueHotkeyManager(appModel: model)
+        let environment = CueAppEnvironment.make()
+        let model = environment.model
+        let hotkeyManager = environment.hotkeyManager
 
         _model = State(initialValue: model)
         _hotkeyManager = State(initialValue: hotkeyManager)
 
         Task { @MainActor in
-            if model.needsPermissionPrompt {
+            if CueAppEnvironment.isUITesting || model.needsPermissionPrompt {
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
 
@@ -24,7 +25,7 @@ struct CueApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            CueMenuBarContentView(model: model, hotkeyManager: hotkeyManager)
+            CueMenuBarContentView(model: model)
         } label: {
             CueMenuBarLabelView(model: model)
         }
@@ -37,11 +38,13 @@ struct CueApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(model.needsPermissionPrompt ? .presented : .suppressed)
 
-        Window("Cue", id: CueSceneID.mainWindow) {
+        WindowGroup("Cue", id: CueSceneID.mainWindow) {
             ContentView(model: model, hotkeyManager: hotkeyManager)
                 .frame(minWidth: 760, minHeight: 760)
         }
-        .defaultLaunchBehavior(.suppressed)
+        .defaultSize(width: 900, height: 820)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(CueAppEnvironment.isUITesting ? .presented : .suppressed)
     }
 }
 

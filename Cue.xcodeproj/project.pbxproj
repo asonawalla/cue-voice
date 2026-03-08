@@ -34,6 +34,12 @@
 		05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MVP_ROADMAP.md; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C6 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D1 /* Project-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Base.xcconfig"; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Debug.xcconfig"; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Release.xcconfig"; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Cue-Base.xcconfig"; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueTests-Base.xcconfig"; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueUITests-Base.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -86,11 +92,25 @@
 			children = (
 				1A2B3C4D5E6F708192A3B4C6 /* README.md */,
 				1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */,
+				1A2B3C4D5E6F708192A3B4D0 /* Config */,
 				05A71C952F5A93C3009A5F0F /* Cue */,
 				05A71CA32F5A93C4009A5F0F /* CueTests */,
 				05A71CAD2F5A93C4009A5F0F /* CueUITests */,
 				05A71C942F5A93C3009A5F0F /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		1A2B3C4D5E6F708192A3B4D0 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */,
+				1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */,
+				1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */,
+				1A2B3C4D5E6F708192A3B4D1 /* Project-Base.xcconfig */,
+				1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */,
+				1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		05A71C942F5A93C3009A5F0F /* Products */ = {
@@ -288,6 +308,7 @@
 /* Begin XCBuildConfiguration section */
 		05A71CB22F5A93C4009A5F0F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -351,6 +372,7 @@
 		};
 		05A71CB32F5A93C4009A5F0F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -406,6 +428,7 @@
 		};
 		05A71CB52F5A93C4009A5F0F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -443,6 +466,7 @@
 		};
 		05A71CB62F5A93C4009A5F0F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -476,6 +500,7 @@
 		};
 		05A71CB82F5A93C4009A5F0F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -496,6 +521,7 @@
 		};
 		05A71CB92F5A93C4009A5F0F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -516,6 +542,7 @@
 		};
 		05A71CBB2F5A93C4009A5F0F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -534,6 +561,7 @@
 		};
 		05A71CBC2F5A93C4009A5F0F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

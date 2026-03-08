@@ -8,7 +8,7 @@ import os
 protocol PermissionService: AnyObject {
     func currentPermissionSnapshot() -> CuePermissionSnapshot
     func requestMicrophonePermission() async -> CuePermissionState
-    func requestPastePermission()
+    func requestAccessibilityPermission()
     func openSystemSettings(for permission: CuePermissionKind)
     func restartApplication()
 }
@@ -27,7 +27,7 @@ final class SystemPermissionService: PermissionService {
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
         CuePermissionSnapshot(
             microphone: microphonePermissionState,
-            paste: pastePermissionState
+            accessibility: accessibilityPermissionState
         )
     }
 
@@ -43,7 +43,7 @@ final class SystemPermissionService: PermissionService {
         return currentState
     }
 
-    func requestPastePermission() {
+    func requestAccessibilityPermission() {
         let granted = CGRequestPostEventAccess()
         logger.info("Requested automatic paste access; current grant state is \(granted, privacy: .public)")
     }
@@ -94,8 +94,8 @@ final class SystemPermissionService: PermissionService {
         }
     }
 
-    private var pastePermissionState: CueAutomationPermissionState {
-        CGPreflightPostEventAccess() ? .available : .unavailable
+    private var accessibilityPermissionState: CueAccessibilityPermissionState {
+        CGPreflightPostEventAccess() ? .granted : .unavailable
     }
 }
 
@@ -104,7 +104,7 @@ private extension CuePermissionKind {
         switch self {
         case .microphone:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        case .paste:
+        case .accessibility:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         }
     }
