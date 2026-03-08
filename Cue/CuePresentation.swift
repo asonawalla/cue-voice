@@ -307,7 +307,7 @@ private enum CueMenuState {
         case .clipboardMode:
             return [.openAccessibilitySettings, .restartApplication, .openMainWindow, .quit]
         case .actionFailed(let shouldOfferModelRetry):
-            return shouldOfferModelRetry ? [.retryModelPreparation, .quit] : [.openMainWindow, .quit]
+            return shouldOfferModelRetry ? [.retryModelPreparation, .openMainWindow, .quit] : [.openMainWindow, .quit]
         }
     }
 }

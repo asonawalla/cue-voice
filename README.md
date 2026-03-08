@@ -46,15 +46,18 @@ Common commands:
 ```bash
 ./scripts/build.sh
 ./scripts/test.sh
+./scripts/test-ui.sh
 ```
 
-You can also open `Cue.xcodeproj` directly in Xcode and run the shared `Cue` scheme.
+`./scripts/test.sh` runs the portable unit-test path. `./scripts/test-ui.sh` runs the opt-in UI smoke test via the shared `CueUI` scheme and requires a macOS session with UI automation available.
+
+You can also open `Cue.xcodeproj` directly in Xcode and run the shared `Cue` scheme for unit-test work or `CueUI` for the UI smoke test.
 
 ## Testing and CI
 
 - Unit tests cover the application workflow, permission states, transcription flow, and insertion behavior.
 - UI tests launch the app with `--ui-testing`, which swaps in deterministic fake services and opens the main window.
-- GitHub Actions runs the shared test entrypoint on `macos-26` so local and remote validation use the same command.
+- GitHub Actions runs the portable build and unit-test entrypoints on `macos-26`.
 
 ## Notes
 
