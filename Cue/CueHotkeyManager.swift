@@ -4,7 +4,7 @@ import KeyboardShortcuts
 import Observation
 import os
 
-let defaultPushToTalkShortcut = KeyboardShortcuts.Shortcut(.d, modifiers: [.control, .option])
+let defaultPushToTalkShortcut = KeyboardShortcuts.Shortcut(.space, modifiers: [.option])
 
 extension KeyboardShortcuts.Name {
     static let pushToTalk = Self(
