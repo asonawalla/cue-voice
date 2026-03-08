@@ -38,7 +38,7 @@ struct CueApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(model.needsPermissionPrompt ? .presented : .suppressed)
 
-        WindowGroup("Cue", id: CueSceneID.mainWindow) {
+        Window("Cue", id: CueSceneID.mainWindow) {
             ContentView(model: model, hotkeyManager: hotkeyManager)
                 .frame(minWidth: 760, minHeight: 760)
         }

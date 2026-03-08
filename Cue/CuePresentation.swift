@@ -236,7 +236,7 @@ private enum CueMenuState {
     case recording
     case transcribing
     case sendingTranscript
-    case actionFailed
+    case actionFailed(shouldOfferModelRetry: Bool)
 
     init(state: CueAppState, shouldOfferModelRetry: Bool) {
         guard state.setup.hasLoadedPermissions else {
@@ -258,10 +258,10 @@ private enum CueMenuState {
             case .pasting:
                 self = .sendingTranscript
             case .failed:
-                self = .actionFailed
+                self = .actionFailed(shouldOfferModelRetry: shouldOfferModelRetry)
             case .idle:
                 if case .failed = state.setup.modelStatus {
-                    self = .actionFailed
+                    self = .actionFailed(shouldOfferModelRetry: shouldOfferModelRetry)
                 } else if !state.isModelReady {
                     self = .preparingModel
                 } else {
@@ -306,8 +306,8 @@ private enum CueMenuState {
             return [.openMicrophoneSettings, .openMainWindow, .quit]
         case .clipboardMode:
             return [.openAccessibilitySettings, .restartApplication, .openMainWindow, .quit]
-        case .actionFailed:
-            return [.retryModelPreparation, .quit]
+        case .actionFailed(let shouldOfferModelRetry):
+            return shouldOfferModelRetry ? [.retryModelPreparation, .quit] : [.openMainWindow, .quit]
         }
     }
 }
