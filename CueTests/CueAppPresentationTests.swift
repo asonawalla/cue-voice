@@ -27,7 +27,7 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.shouldOfferModelRetry)
-        #expect(presentation.menu.actions == [.retryModelPreparation, .quit])
+        #expect(presentation.menu.actions == [.retryModelPreparation, .openMainWindow, .quit])
     }
 
     @Test func nonModelFailurePresentationKeepsOpenCueAvailable() {

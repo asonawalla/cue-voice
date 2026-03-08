@@ -32,16 +32,6 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "05A71C9F2F5A93C4009A5F0F"
-               BuildableName = "CueTests.xctest"
-               BlueprintName = "CueTests"
-               ReferencedContainer = "container:Cue.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "05A71CA92F5A93C4009A5F0F"
                BuildableName = "CueUITests.xctest"
                BlueprintName = "CueUITests"
