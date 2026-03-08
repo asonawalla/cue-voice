@@ -5,7 +5,6 @@ import Observation
 import os
 
 let defaultPushToTalkShortcut = KeyboardShortcuts.Shortcut(.d, modifiers: [.control, .option])
-private let unsupportedFunctionShortcut = KeyboardShortcuts.Shortcut(.function)
 
 extension KeyboardShortcuts.Name {
     static let pushToTalk = Self(
@@ -75,7 +74,6 @@ final class CueHotkeyManager {
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Hotkey")
 
     private static let initializationFlagKey = "Cue.pushToTalkShortcutInitialized"
-    private static let unsupportedShortcutMigrationFlagKey = "Cue.pushToTalkShortcutMigratedFromUnsupportedFunctionKey"
 
     init(
         appModel: CueAppModel,
@@ -88,7 +86,6 @@ final class CueHotkeyManager {
         shortcutSummary = "Not configured"
         hasConfiguredShortcut = false
 
-        migrateUnsupportedFunctionShortcutIfNeeded()
         initializeShortcutIfNeeded()
 
         let currentShortcut = self.bindingService.currentShortcut()
@@ -143,20 +140,4 @@ final class CueHotkeyManager {
         logger.info("Initialized push-to-talk shortcut to the supported default")
     }
 
-    private func migrateUnsupportedFunctionShortcutIfNeeded() {
-        guard !defaults.bool(forKey: Self.unsupportedShortcutMigrationFlagKey) else {
-            return
-        }
-
-        defer {
-            defaults.set(true, forKey: Self.unsupportedShortcutMigrationFlagKey)
-        }
-
-        guard bindingService.currentShortcut() == unsupportedFunctionShortcut else {
-            return
-        }
-
-        bindingService.setShortcut(defaultPushToTalkShortcut)
-        logger.info("Migrated push-to-talk shortcut from unsupported fn to the supported default")
-    }
 }
