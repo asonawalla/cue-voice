@@ -5,4 +5,4 @@ set -euo pipefail
 xcodebuild test \
   -project Cue.xcodeproj \
   -scheme Cue \
-  -destination "platform=macOS,arch=arm64"
+  -destination "platform=macOS"

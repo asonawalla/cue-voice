@@ -29,4 +29,17 @@ struct CueAppPresentationTests {
         #expect(presentation.shouldOfferModelRetry)
         #expect(presentation.menu.actions == [.retryModelPreparation, .quit])
     }
+
+    @Test func nonModelFailurePresentationKeepsOpenCueAvailable() {
+        var state = CueAppState.initial(
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        )
+        state.setup.modelStatus = .ready
+        state.session = .failed(CueFailure.from(CueError.emptyTranscript))
+
+        let presentation = CueAppPresentation(state: state)
+
+        #expect(!presentation.shouldOfferModelRetry)
+        #expect(presentation.menu.actions == [.openMainWindow, .quit])
+    }
 }
