@@ -3,19 +3,17 @@ import Testing
 
 @MainActor
 struct CueAppPresentationTests {
-    @Test func clipboardModePresentationExposesSharedSetupAndMenuMetadata() {
+    @Test func accessibilityRequiredPresentationShowsSetupPrompt() {
         var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
         state.setup.modelStatus = .ready
 
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.needsPermissionPrompt)
-        #expect(presentation.menu.title == "Clipboard Mode")
-        #expect(presentation.menu.actions == [.openAccessibilitySettings, .restartApplication, .openMainWindow, .quit])
-        #expect(presentation.setup.accessibility.primaryAction == .openAccessibilitySettings)
-        #expect(presentation.setup.accessibility.secondaryAction == .restartApplication)
+        #expect(presentation.setup.accessibility.primaryAction == .requestAccessibilityPermission)
+        #expect(presentation.setup.accessibility.secondaryAction == .openAccessibilitySettings)
     }
 
     @Test func failedModelPreparationPresentationOffersRetryAction() {
@@ -27,10 +25,9 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.shouldOfferModelRetry)
-        #expect(presentation.menu.actions == [.retryModelPreparation, .openMainWindow, .quit])
     }
 
-    @Test func nonModelFailurePresentationKeepsOpenCueAvailable() {
+    @Test func nonModelFailurePresentationShowsError() {
         var state = CueAppState.initial(
             permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
@@ -40,6 +37,17 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(!presentation.shouldOfferModelRetry)
-        #expect(presentation.menu.actions == [.openMainWindow, .quit])
+    }
+
+    @Test func fullyConfiguredPresentationDoesNotNeedPermissionPrompt() {
+        var state = CueAppState.initial(
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        )
+        state.setup.modelStatus = .ready
+
+        let presentation = CueAppPresentation(state: state)
+
+        #expect(!presentation.needsPermissionPrompt)
+        #expect(presentation.menuBarPrimaryStatus == "Ready")
     }
 }

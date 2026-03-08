@@ -8,7 +8,7 @@ struct CueAppModelPermissionTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .notGranted)
         )
         permissionService.microphoneRequestResult = .granted
 
@@ -23,42 +23,17 @@ struct CueAppModelPermissionTests {
         await model.handlePushToTalkPressed()
 
         #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(model.isReadyToRecord)
-        #expect(transcriptionService.prepareCallCount == 1)
+        #expect(!model.isReadyToRecord)
+        #expect(transcriptionService.prepareCallCount == 0)
         #expect(transcriptionService.startRecordingCallCount == 0)
         #expect(model.sessionState == .idle)
-    }
-
-    @Test func secondPushToTalkStartsRecordingAfterPermissionBootstrap() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
-        )
-        permissionService.microphoneRequestResult = .granted
-
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
-
-        await model.launch()
-        await model.handlePushToTalkPressed()
-        await model.handlePushToTalkPressed()
-
-        #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(transcriptionService.prepareCallCount == 1)
-        #expect(transcriptionService.startRecordingCallCount == 1)
-        #expect(model.sessionState == .recording)
     }
 
     @Test func pushToTalkWithDeniedMicrophoneShowsErrorWithoutStartingRecording() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .denied, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .denied, accessibility: .notGranted)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -74,11 +49,31 @@ struct CueAppModelPermissionTests {
         #expect(model.errorMessage == CueError.microphonePermissionDenied.errorDescription)
     }
 
-    @Test func grantingMicrophonePermissionWarmsTheModelEvenWhenAccessibilityIsUnavailable() async throws {
+    @Test func pushToTalkWithoutAccessibilityShowsError() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        await model.handlePushToTalkPressed()
+
+        #expect(transcriptionService.startRecordingCallCount == 0)
+        #expect(model.errorMessage == CueError.accessibilityPermissionDenied.errorDescription)
+    }
+
+    @Test func grantingMicrophonePermissionDoesNotWarmModelWithoutAccessibility() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .notGranted)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -93,19 +88,16 @@ struct CueAppModelPermissionTests {
         await model.requestMicrophonePermission()
 
         #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(model.isReadyToRecord)
-        #expect(transcriptionService.prepareCallCount == 1)
-        #expect(model.isModelReady)
-        #expect(!model.permissionSnapshot.canAutoPaste)
+        #expect(!model.isReadyToRecord)
+        #expect(transcriptionService.prepareCallCount == 0)
         #expect(model.needsPermissionPrompt)
-        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts.")
     }
 
     @Test func openingAccessibilitySettingsRequestsAccessBeforeShowingSystemSettings() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -125,7 +117,7 @@ struct CueAppModelPermissionTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,

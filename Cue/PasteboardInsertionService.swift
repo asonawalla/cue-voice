@@ -62,11 +62,7 @@ final class PasteboardInsertionService: TextInsertionService {
             return try copyTranscriptToClipboard(text, reason: reason, targetApplication: nil)
         case .target(let targetApplication):
             guard hasAccessibilityPermission() else {
-                return try copyTranscriptToClipboard(
-                    text,
-                    reason: .accessibilityPermissionMissing,
-                    targetApplication: targetApplication
-                )
+                throw CueError.accessibilityPermissionDenied
             }
 
             do {

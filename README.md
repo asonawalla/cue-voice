@@ -59,7 +59,7 @@ You can also open `Cue.xcodeproj` directly in Xcode and run the shared `Cue` sch
 - UI tests launch the app with `--ui-testing`, which swaps in deterministic fake services and opens the main window.
 - GitHub Actions runs the portable build and unit-test entrypoints on `macos-26`.
 
-## Notes
+## NoteTest test 1, 2, 3.s
 
 Cue is primarily a personal project, but the codebase is being shaped like a production app:
 clearer state modeling, coordinator-driven workflow logic, focused tests, and automated CI.

@@ -68,6 +68,10 @@ final class CueSetupCoordinator {
         permissionService.openSystemSettings(for: .accessibility)
     }
 
+    func requestAccessibilityPermission() {
+        permissionService.requestAccessibilityPermission()
+    }
+
     func restartApplication() {
         permissionService.restartApplication()
     }
@@ -100,7 +104,7 @@ final class CueSetupCoordinator {
             return
         }
 
-        guard stateStore.state.setup.permissions.isMicrophoneReady else {
+        guard stateStore.state.setup.permissions.isFullyConfigured else {
             return
         }
 

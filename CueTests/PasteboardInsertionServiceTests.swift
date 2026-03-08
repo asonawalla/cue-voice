@@ -5,7 +5,7 @@ import Testing
 
 @MainActor
 struct PasteboardInsertionServiceTests {
-    @Test func insertWithoutAccessibilityFallsBackToClipboard() async throws {
+    @Test func insertWithoutAccessibilityThrowsError() async throws {
         let resolver = FakeFrontmostApplicationResolver(
             application: CueRunningApplication(
                 processIdentifier: 42,
@@ -23,11 +23,9 @@ struct PasteboardInsertionServiceTests {
             mainBundleIdentifier: "dev.sonawalla.Cue"
         )
 
-        let result = try await service.insert("hello")
-
-        #expect(result.delivery == .copiedToClipboard(.accessibilityPermissionMissing))
-        #expect(pasteboard.writtenStrings == ["hello"])
-        #expect(poster.postedProcessIdentifiers.isEmpty)
+        await #expect(throws: CueError.accessibilityPermissionDenied) {
+            _ = try await service.insert("hello")
+        }
     }
 
     @Test func insertSkipsPastingIntoCueItself() async throws {

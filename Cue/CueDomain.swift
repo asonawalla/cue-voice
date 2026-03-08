@@ -18,7 +18,7 @@ enum CuePermissionKind: CaseIterable, Equatable {
         case .microphone:
             return "Cue needs microphone access to capture your speech."
         case .accessibility:
-            return "Cue uses Accessibility to paste automatically into the focused app. After you enable it in System Settings, restart Cue to turn automatic paste on."
+            return "Cue uses Accessibility to paste automatically into the focused app."
         }
     }
 
@@ -55,14 +55,14 @@ enum CuePermissionState: Equatable {
 
 enum CueAccessibilityPermissionState: Equatable {
     case granted
-    case unavailable
+    case notGranted
 
     var title: String {
         switch self {
         case .granted:
-            return "Ready"
-        case .unavailable:
-            return "Clipboard Mode"
+            return "Granted"
+        case .notGranted:
+            return "Not Granted"
         }
     }
 
@@ -79,17 +79,25 @@ struct CuePermissionSnapshot: Equatable {
         microphone.isGranted
     }
 
+    var isAccessibilityReady: Bool {
+        accessibility.isGranted
+    }
+
     var canAutoPaste: Bool {
         accessibility.isGranted
     }
 
+    var isFullyConfigured: Bool {
+        isMicrophoneReady && isAccessibilityReady
+    }
+
     var setupSummary: String {
         guard isMicrophoneReady else {
-            return "Cue needs microphone access before dictation can run. Accessibility is optional and turns on automatic paste after Cue restarts."
+            return "Cue needs microphone access before dictation can run."
         }
 
         guard canAutoPaste else {
-            return "Cue can already record and transcribe. Enable Accessibility in System Settings, then restart Cue if you want automatic paste; until then Cue stays in clipboard mode."
+            return "Cue needs Accessibility permission to paste automatically."
         }
 
         return "Cue can record, transcribe, and paste automatically."
@@ -197,15 +205,12 @@ enum CueInsertionDelivery: Equatable {
 }
 
 enum CueClipboardFallbackReason: Equatable {
-    case accessibilityPermissionMissing
     case noFrontmostApplication
     case targetWasCue
     case postEventSubmissionFailed(String)
 
     var description: String {
         switch self {
-        case .accessibilityPermissionMissing:
-            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste. If you just enabled Accessibility, restart Cue to turn automatic paste on."
         case .noFrontmostApplication:
             return "Cue could not determine a destination app, so it copied the transcript to the clipboard."
         case .targetWasCue:
@@ -228,6 +233,7 @@ struct LatencyMetrics: Equatable {
 enum CueError: LocalizedError, Equatable {
     case busy
     case microphonePermissionDenied
+    case accessibilityPermissionDenied
     case missingMicrophoneInput
     case recordingFailed(String)
     case recordingAlreadyInProgress
@@ -243,7 +249,7 @@ enum CueError: LocalizedError, Equatable {
 
     var isPermissionRelated: Bool {
         switch self {
-        case .microphonePermissionDenied:
+        case .microphonePermissionDenied, .accessibilityPermissionDenied:
             return true
         default:
             return false
@@ -265,6 +271,8 @@ enum CueError: LocalizedError, Equatable {
             return "Cue is already handling another action."
         case .microphonePermissionDenied:
             return "Cue needs microphone access before it can record audio. Allow Cue in System Settings > Privacy & Security > Microphone."
+        case .accessibilityPermissionDenied:
+            return "Cue needs Accessibility permission to paste automatically. Allow Cue in System Settings > Privacy & Security > Accessibility."
         case .missingMicrophoneInput:
             return "Cue could not find a usable microphone input device."
         case .recordingFailed(let message):
@@ -383,7 +391,7 @@ struct CueAppState: Equatable {
     }
 
     var isReadyToRecord: Bool {
-        setup.hasLoadedPermissions && setup.permissions.isMicrophoneReady
+        setup.hasLoadedPermissions && setup.permissions.isFullyConfigured
     }
 
     var isModelReady: Bool {

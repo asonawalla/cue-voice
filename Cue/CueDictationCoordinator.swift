@@ -45,6 +45,12 @@ final class CueDictationCoordinator {
             return
         }
 
+        guard state.setup.permissions.isAccessibilityReady else {
+            logger.info("Ignoring push-to-talk press because accessibility access is unavailable")
+            present(CueError.accessibilityPermissionDenied)
+            return
+        }
+
         guard state.isModelReady else {
             logger.info("Ignoring push-to-talk press while model status is \(state.setup.modelStatus.title, privacy: .public)")
             await setupCoordinator.warmModel()
@@ -81,6 +87,12 @@ final class CueDictationCoordinator {
         guard state.setup.permissions.isMicrophoneReady else {
             logger.info("Ignoring record start because microphone access is unavailable")
             present(CueError.microphonePermissionDenied)
+            return
+        }
+
+        guard state.setup.permissions.isAccessibilityReady else {
+            logger.info("Ignoring record start because accessibility access is unavailable")
+            present(CueError.accessibilityPermissionDenied)
             return
         }
 

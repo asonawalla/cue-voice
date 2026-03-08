@@ -63,6 +63,10 @@ final class CueWorkflowCoordinator {
         await setupCoordinator.requestMicrophonePermission()
     }
 
+    func requestAccessibilityPermission() {
+        setupCoordinator.requestAccessibilityPermission()
+    }
+
     func retryModelPreparation() async {
         await setupCoordinator.warmModel()
     }

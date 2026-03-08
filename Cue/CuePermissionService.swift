@@ -95,7 +95,7 @@ final class SystemPermissionService: PermissionService {
     }
 
     private var accessibilityPermissionState: CueAccessibilityPermissionState {
-        CGPreflightPostEventAccess() ? .granted : .unavailable
+        CGPreflightPostEventAccess() ? .granted : .notGranted
     }
 }
 

@@ -95,18 +95,6 @@ final class CueAppModel: CueStateStore {
         presentation.shouldOfferModelRetry
     }
 
-    var automaticPasteWarningMessage: String? {
-        presentation.setup.automaticPasteWarningMessage
-    }
-
-    var accessibilityRestartMessage: String? {
-        presentation.setup.accessibilityRestartMessage
-    }
-
-    var showsAutomaticPasteIndicator: Bool {
-        presentation.showsAutomaticPasteIndicator
-    }
-
     var menuBarSymbolName: String {
         presentation.menuBarSymbolName
     }
@@ -135,6 +123,10 @@ final class CueAppModel: CueStateStore {
         await workflowCoordinator.requestMicrophonePermission()
     }
 
+    func requestAccessibilityPermission() {
+        workflowCoordinator.requestAccessibilityPermission()
+    }
+
     func openMicrophoneSettings() {
         workflowCoordinator.openMicrophoneSettings()
     }
@@ -159,12 +151,14 @@ final class CueAppModel: CueStateStore {
         await workflowCoordinator.handlePushToTalkReleased()
     }
 
-    func perform(_ action: CueAppAction, openMainWindow: (() -> Void)? = nil) {
+    func perform(_ action: CueAppAction) {
         switch action {
         case .requestMicrophonePermission:
             Task {
                 await requestMicrophonePermission()
             }
+        case .requestAccessibilityPermission:
+            requestAccessibilityPermission()
         case .openMicrophoneSettings:
             openMicrophoneSettings()
         case .openAccessibilitySettings:
@@ -175,9 +169,6 @@ final class CueAppModel: CueStateStore {
             Task {
                 await retryModelPreparation()
             }
-        case .openMainWindow:
-            openMainWindow?()
-            NSApplication.shared.activate(ignoringOtherApps: true)
         case .quit:
             NSApplication.shared.terminate(nil)
         }

@@ -45,40 +45,7 @@ struct CueAppModelDictationTests {
         #expect(insertionService.insertCallCount == 1)
     }
 
-    @Test func clipboardFallbackKeepsTranscriptAndReturnsToIdle() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
-        )
-        insertionService.result = CueInsertionResult(
-            delivery: .copiedToClipboard(.accessibilityPermissionMissing),
-            targetAppName: "TextEdit",
-            targetBundleIdentifier: "com.apple.TextEdit",
-            pasteDuration: 0
-        )
-
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
-
-        await model.launch()
-        await model.handlePushToTalkPressed()
-        await model.handlePushToTalkReleased()
-
-        #expect(model.sessionState == .idle)
-        #expect(model.transcript == transcriptionService.result.text)
-        #expect(model.lastInsertionResult?.delivery == .copiedToClipboard(.accessibilityPermissionMissing))
-        #expect(model.errorMessage == nil)
-        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts.")
-        #expect(model.lastInsertionResult?.delivery.detail == CueClipboardFallbackReason.accessibilityPermissionMissing.description)
-        #expect(insertionService.insertCallCount == 1)
-    }
-
-    @Test func launchFailureMovesStateToErrorWhenMicrophoneIsSatisfied() async throws {
+    @Test func launchFailureMovesStateToErrorWhenPermissionsAreSatisfied() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
