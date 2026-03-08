@@ -39,9 +39,9 @@ final class CueDictationCoordinator {
             return
         }
 
-        guard state.setup.permissions.isMicrophoneReady else {
-            logger.info("Ignoring push-to-talk press because microphone access is unavailable")
-            present(CueError.microphonePermissionDenied)
+        if let permissionError = blockingPermissionError(for: state.setup.permissions) {
+            logger.info("Ignoring push-to-talk press because setup is incomplete")
+            present(permissionError)
             return
         }
 
@@ -78,9 +78,9 @@ final class CueDictationCoordinator {
             return
         }
 
-        guard state.setup.permissions.isMicrophoneReady else {
-            logger.info("Ignoring record start because microphone access is unavailable")
-            present(CueError.microphonePermissionDenied)
+        if let permissionError = blockingPermissionError(for: state.setup.permissions) {
+            logger.info("Ignoring record start because setup is incomplete")
+            present(permissionError)
             return
         }
 
@@ -157,6 +157,22 @@ final class CueDictationCoordinator {
                 state.session = .idle
             }
         }
+    }
+
+    private func blockingPermissionError(for permissions: CuePermissionSnapshot) -> CueError? {
+        if !permissions.isMicrophoneReady {
+            return .microphonePermissionDenied
+        }
+
+        if !permissions.canMonitorInput {
+            return .inputMonitoringPermissionDenied
+        }
+
+        if !permissions.canAutoPaste {
+            return .accessibilityPermissionDenied
+        }
+
+        return nil
     }
 
     private func present(_ error: Error) {

@@ -4,15 +4,15 @@ import SwiftUI
 @main
 struct CueApp: App {
     @State private var model: CueAppModel
-    @State private var hotkeyManager: CueHotkeyManager
+    @State private var triggerManager: CueTriggerManager
 
     init() {
         let environment = CueAppEnvironment.make()
         let model = environment.model
-        let hotkeyManager = environment.hotkeyManager
+        let triggerManager = environment.triggerManager
 
         _model = State(initialValue: model)
-        _hotkeyManager = State(initialValue: hotkeyManager)
+        _triggerManager = State(initialValue: triggerManager)
 
         Task { @MainActor in
             if CueAppEnvironment.isUITesting || model.needsPermissionPrompt {
@@ -34,12 +34,12 @@ struct CueApp: App {
         Window("Finish Setup", id: CueSceneID.permissionsWindow) {
             CuePermissionsPromptView(model: model)
         }
-        .defaultSize(width: 460, height: 420)
+        .defaultSize(width: 460, height: 560)
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(model.needsPermissionPrompt ? .presented : .suppressed)
 
         Window("Cue", id: CueSceneID.mainWindow) {
-            ContentView(model: model, hotkeyManager: hotkeyManager)
+            ContentView(model: model, triggerManager: triggerManager)
                 .frame(minWidth: 760, minHeight: 760)
         }
         .defaultSize(width: 900, height: 820)
@@ -52,16 +52,7 @@ private struct CueMenuBarLabelView: View {
     @Bindable var model: CueAppModel
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: model.menuBarSymbolName)
-                .accessibilityLabel(model.menuBarPrimaryStatus)
-
-            if model.showsAutomaticPasteIndicator {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 7, height: 7)
-                    .offset(x: 3, y: -2)
-            }
-        }
+        Image(systemName: model.menuBarSymbolName)
+            .accessibilityLabel(model.menuBarPrimaryStatus)
     }
 }

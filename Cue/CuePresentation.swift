@@ -3,8 +3,8 @@ import Foundation
 enum CueAppAction: Hashable {
     case requestMicrophonePermission
     case openMicrophoneSettings
+    case openInputMonitoringSettings
     case openAccessibilitySettings
-    case restartApplication
     case retryModelPreparation
     case openMainWindow
     case quit
@@ -15,10 +15,10 @@ enum CueAppAction: Hashable {
             return "Grant Microphone Access"
         case .openMicrophoneSettings:
             return "Open Microphone Settings"
+        case .openInputMonitoringSettings:
+            return "Open Input Monitoring Settings"
         case .openAccessibilitySettings:
             return "Open Accessibility Settings"
-        case .restartApplication:
-            return "Restart Cue"
         case .retryModelPreparation:
             return "Retry Model Preparation"
         case .openMainWindow:
@@ -32,16 +32,13 @@ enum CueAppAction: Hashable {
 struct CuePermissionSectionPresentation: Equatable {
     let detail: String
     let primaryAction: CueAppAction?
-    let secondaryAction: CueAppAction?
-    let showsClipboardModeDismissal: Bool
 }
 
 struct CueSetupPresentation: Equatable {
     let statusSummary: String
     let microphone: CuePermissionSectionPresentation
+    let inputMonitoring: CuePermissionSectionPresentation
     let accessibility: CuePermissionSectionPresentation
-    let automaticPasteWarningMessage: String?
-    let accessibilityRestartMessage: String?
 }
 
 struct CueMenuPresentation: Equatable {
@@ -52,7 +49,6 @@ struct CueMenuPresentation: Equatable {
 struct CueAppPresentation: Equatable {
     let needsPermissionPrompt: Bool
     let shouldOfferModelRetry: Bool
-    let showsAutomaticPasteIndicator: Bool
     let menuBarSymbolName: String
     let menuBarPrimaryStatus: String
     let menuBarSecondaryStatus: String?
@@ -62,23 +58,13 @@ struct CueAppPresentation: Equatable {
     init(state: CueAppState) {
         let hasLoadedPermissions = state.setup.hasLoadedPermissions
         let permissions = state.setup.permissions
-        let automaticPasteWarningMessage = hasLoadedPermissions && permissions.isMicrophoneReady && !permissions.canAutoPaste
-            ? "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts."
-            : nil
-        let accessibilityRestartMessage = hasLoadedPermissions && permissions.isMicrophoneReady && !permissions.canAutoPaste
-            ? "After you enable Cue in Accessibility settings, restart the app to turn automatic paste on."
-            : nil
 
-        needsPermissionPrompt = hasLoadedPermissions && (!permissions.isMicrophoneReady || !permissions.canAutoPaste)
+        needsPermissionPrompt = hasLoadedPermissions && !permissions.isFullyReady
         shouldOfferModelRetry = state.isReadyToRecord && !state.isModelReady && !state.setup.modelStatus.isPreparing
-        showsAutomaticPasteIndicator = hasLoadedPermissions && permissions.isMicrophoneReady && !permissions.canAutoPaste
 
         menuBarSymbolName = CueAppPresentation.makeMenuBarSymbolName(state: state)
         menuBarPrimaryStatus = CueAppPresentation.makeMenuBarPrimaryStatus(state: state)
-        menuBarSecondaryStatus = CueAppPresentation.makeMenuBarSecondaryStatus(
-            state: state,
-            automaticPasteWarningMessage: automaticPasteWarningMessage
-        )
+        menuBarSecondaryStatus = CueAppPresentation.makeMenuBarSecondaryStatus(state: state)
 
         let menuState = CueMenuState(state: state, shouldOfferModelRetry: shouldOfferModelRetry)
         menu = CueMenuPresentation(title: menuState.title, actions: menuState.actions)
@@ -86,12 +72,8 @@ struct CueAppPresentation: Equatable {
         setup = CueSetupPresentation(
             statusSummary: permissions.setupSummary,
             microphone: CueAppPresentation.makeMicrophonePresentation(for: permissions.microphone),
-            accessibility: CueAppPresentation.makeAccessibilityPresentation(
-                permissions: permissions,
-                accessibilityRestartMessage: accessibilityRestartMessage
-            ),
-            automaticPasteWarningMessage: automaticPasteWarningMessage,
-            accessibilityRestartMessage: accessibilityRestartMessage
+            inputMonitoring: CueAppPresentation.makeInputMonitoringPresentation(for: permissions.inputMonitoring),
+            accessibility: CueAppPresentation.makeAccessibilityPresentation(for: permissions.accessibility)
         )
     }
 
@@ -100,7 +82,7 @@ struct CueAppPresentation: Equatable {
             return "waveform.circle"
         }
 
-        guard state.setup.permissions.isMicrophoneReady else {
+        guard state.setup.permissions.isFullyReady else {
             return "waveform.badge.exclamationmark"
         }
 
@@ -123,8 +105,8 @@ struct CueAppPresentation: Equatable {
             return "Checking Permissions"
         }
 
-        guard state.setup.permissions.isMicrophoneReady else {
-            return "Microphone Required"
+        guard state.setup.permissions.isFullyReady else {
+            return menuTitleForMissingPermissions(state.setup.permissions)
         }
 
         switch state.session {
@@ -133,27 +115,24 @@ struct CueAppPresentation: Equatable {
                 return "Preparing Model"
             }
 
-            return state.setup.permissions.canAutoPaste ? "Ready" : "Clipboard Mode"
+            return "Ready"
         default:
             return state.session.title
         }
     }
 
-    private static func makeMenuBarSecondaryStatus(
-        state: CueAppState,
-        automaticPasteWarningMessage: String?
-    ) -> String? {
+    private static func makeMenuBarSecondaryStatus(state: CueAppState) -> String? {
         guard state.setup.hasLoadedPermissions else {
             return "Cue is checking which permissions are available."
         }
 
-        guard state.setup.permissions.isMicrophoneReady else {
+        guard state.setup.permissions.isFullyReady else {
             return state.setup.permissions.setupSummary
         }
 
         switch state.session {
         case .recording:
-            return "Release the shortcut to stop recording."
+            return "Release the modifier to stop recording."
         case .transcribing:
             return "WhisperKit is transcribing the latest clip."
         case .pasting:
@@ -165,7 +144,7 @@ struct CueAppPresentation: Equatable {
                 return state.setup.modelStatus.title
             }
 
-            return automaticPasteWarningMessage ?? "Hold the push-to-talk shortcut in any app."
+            return "Hold the selected modifier in any app."
         }
     }
 
@@ -173,66 +152,74 @@ struct CueAppPresentation: Equatable {
         switch permission {
         case .notDetermined:
             return CuePermissionSectionPresentation(
-                detail: "Grant microphone access first so Cue can start recording.",
-                primaryAction: .requestMicrophonePermission,
-                secondaryAction: nil,
-                showsClipboardModeDismissal: false
+                detail: "Grant microphone access so Cue can capture your speech.",
+                primaryAction: .requestMicrophonePermission
             )
         case .denied:
             return CuePermissionSectionPresentation(
                 detail: "Microphone access is blocked. Open System Settings to allow Cue to record.",
-                primaryAction: .openMicrophoneSettings,
-                secondaryAction: nil,
-                showsClipboardModeDismissal: false
+                primaryAction: .openMicrophoneSettings
             )
         case .granted:
             return CuePermissionSectionPresentation(
-                detail: "Microphone is ready. Cue can record on this launch.",
-                primaryAction: nil,
-                secondaryAction: nil,
-                showsClipboardModeDismissal: false
+                detail: "Microphone is ready.",
+                primaryAction: nil
             )
         }
     }
 
-    private static func makeAccessibilityPresentation(
-        permissions: CuePermissionSnapshot,
-        accessibilityRestartMessage: String?
-    ) -> CuePermissionSectionPresentation {
-        guard permissions.isMicrophoneReady else {
+    private static func makeInputMonitoringPresentation(for permission: CueSystemPermissionState) -> CuePermissionSectionPresentation {
+        switch permission {
+        case .granted:
             return CuePermissionSectionPresentation(
-                detail: "Finish microphone setup first. Then you can optionally enable Accessibility for automatic paste.",
-                primaryAction: nil,
-                secondaryAction: nil,
-                showsClipboardModeDismissal: false
+                detail: "Input Monitoring is ready. Cue can listen for the selected push-to-talk modifier globally.",
+                primaryAction: nil
+            )
+        case .unavailable:
+            return CuePermissionSectionPresentation(
+                detail: "Enable Input Monitoring so Cue can start and stop recording when you hold the selected modifier in any app.",
+                primaryAction: .openInputMonitoringSettings
             )
         }
+    }
 
-        guard !permissions.canAutoPaste else {
+    private static func makeAccessibilityPresentation(for permission: CueSystemPermissionState) -> CuePermissionSectionPresentation {
+        switch permission {
+        case .granted:
             return CuePermissionSectionPresentation(
-                detail: "Accessibility is ready on this launch. Cue can paste automatically into the focused app.",
-                primaryAction: nil,
-                secondaryAction: nil,
-                showsClipboardModeDismissal: false
+                detail: "Accessibility is ready. Cue can paste transcripts into the focused app after recording.",
+                primaryAction: nil
+            )
+        case .unavailable:
+            return CuePermissionSectionPresentation(
+                detail: "Enable Accessibility so Cue can send the transcript into the focused app after recording finishes.",
+                primaryAction: .openAccessibilitySettings
             )
         }
+    }
 
-        return CuePermissionSectionPresentation(
-            detail: accessibilityRestartMessage ?? "Open Accessibility settings, enable Cue, then restart the app to turn automatic paste on.",
-            primaryAction: .openAccessibilitySettings,
-            secondaryAction: .restartApplication,
-            showsClipboardModeDismissal: true
-        )
+    fileprivate static func menuTitleForMissingPermissions(_ permissions: CuePermissionSnapshot) -> String {
+        if permissions.missingPermissions == [.microphone] {
+            return "Microphone Required"
+        }
+
+        if permissions.missingPermissions == [.inputMonitoring] {
+            return "Input Monitoring Required"
+        }
+
+        if permissions.missingPermissions == [.accessibility] {
+            return "Accessibility Required"
+        }
+
+        return "Setup Required"
     }
 }
 
 private enum CueMenuState {
     case checkingSetup
-    case microphoneRequired
-    case microphoneBlocked
+    case setupRequired(title: String, actions: [CueAppAction])
     case preparingModel
     case ready
-    case clipboardMode
     case recording
     case transcribing
     case sendingTranscript
@@ -244,29 +231,30 @@ private enum CueMenuState {
             return
         }
 
-        switch state.setup.permissions.microphone {
-        case .notDetermined:
-            self = .microphoneRequired
-        case .denied:
-            self = .microphoneBlocked
-        case .granted:
-            switch state.session {
-            case .recording:
-                self = .recording
-            case .transcribing:
-                self = .transcribing
-            case .pasting:
-                self = .sendingTranscript
-            case .failed:
+        guard state.setup.permissions.isFullyReady else {
+            self = .setupRequired(
+                title: CueAppPresentation.menuTitleForMissingPermissions(state.setup.permissions),
+                actions: Self.setupActions(for: state.setup.permissions)
+            )
+            return
+        }
+
+        switch state.session {
+        case .recording:
+            self = .recording
+        case .transcribing:
+            self = .transcribing
+        case .pasting:
+            self = .sendingTranscript
+        case .failed:
+            self = .actionFailed(shouldOfferModelRetry: shouldOfferModelRetry)
+        case .idle:
+            if case .failed = state.setup.modelStatus {
                 self = .actionFailed(shouldOfferModelRetry: shouldOfferModelRetry)
-            case .idle:
-                if case .failed = state.setup.modelStatus {
-                    self = .actionFailed(shouldOfferModelRetry: shouldOfferModelRetry)
-                } else if !state.isModelReady {
-                    self = .preparingModel
-                } else {
-                    self = state.setup.permissions.canAutoPaste ? .ready : .clipboardMode
-                }
+            } else if !state.isModelReady {
+                self = .preparingModel
+            } else {
+                self = .ready
             }
         }
     }
@@ -275,16 +263,12 @@ private enum CueMenuState {
         switch self {
         case .checkingSetup:
             return "Checking Setup"
-        case .microphoneRequired:
-            return "Microphone Required"
-        case .microphoneBlocked:
-            return "Microphone Blocked"
+        case .setupRequired(let title, _):
+            return title
         case .preparingModel:
             return "Preparing Model"
         case .ready:
             return "Ready"
-        case .clipboardMode:
-            return "Clipboard Mode"
         case .recording:
             return "Recording"
         case .transcribing:
@@ -300,14 +284,34 @@ private enum CueMenuState {
         switch self {
         case .checkingSetup, .preparingModel, .ready, .recording, .transcribing, .sendingTranscript:
             return [.openMainWindow, .quit]
-        case .microphoneRequired:
-            return [.requestMicrophonePermission, .openMainWindow, .quit]
-        case .microphoneBlocked:
-            return [.openMicrophoneSettings, .openMainWindow, .quit]
-        case .clipboardMode:
-            return [.openAccessibilitySettings, .restartApplication, .openMainWindow, .quit]
+        case .setupRequired(_, let actions):
+            return actions
         case .actionFailed(let shouldOfferModelRetry):
             return shouldOfferModelRetry ? [.retryModelPreparation, .openMainWindow, .quit] : [.openMainWindow, .quit]
         }
+    }
+
+    private static func setupActions(for permissions: CuePermissionSnapshot) -> [CueAppAction] {
+        var actions: [CueAppAction] = []
+
+        if !permissions.isMicrophoneReady {
+            let microphoneAction: CueAppAction = permissions.microphone == .notDetermined
+                ? .requestMicrophonePermission
+                : .openMicrophoneSettings
+            actions.append(microphoneAction)
+        }
+
+        if !permissions.canMonitorInput {
+            actions.append(.openInputMonitoringSettings)
+        }
+
+        if !permissions.canAutoPaste {
+            actions.append(.openAccessibilitySettings)
+        }
+
+        actions.append(.openMainWindow)
+        actions.append(.quit)
+
+        return actions
     }
 }

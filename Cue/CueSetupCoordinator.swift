@@ -41,7 +41,7 @@ final class CueSetupCoordinator {
             state.setup.permissions = snapshot
             state.setup.hasLoadedPermissions = true
 
-            if snapshot.isMicrophoneReady, state.currentFailure?.isPermissionRelated == true {
+            if snapshot.isFullyReady, state.currentFailure?.isPermissionRelated == true {
                 state.session = .idle
             }
         }
@@ -63,13 +63,14 @@ final class CueSetupCoordinator {
         permissionService.openSystemSettings(for: .microphone)
     }
 
+    func openInputMonitoringSettings() {
+        permissionService.requestInputMonitoringPermission()
+        permissionService.openSystemSettings(for: .inputMonitoring)
+    }
+
     func openAccessibilitySettings() {
         permissionService.requestAccessibilityPermission()
         permissionService.openSystemSettings(for: .accessibility)
-    }
-
-    func restartApplication() {
-        permissionService.restartApplication()
     }
 
     func runFirstUsePermissionBootstrap() async {

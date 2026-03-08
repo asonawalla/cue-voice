@@ -1,9 +1,8 @@
-import KeyboardShortcuts
 import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: CueAppModel
-    @Bindable var hotkeyManager: CueHotkeyManager
+    @Bindable var triggerManager: CueTriggerManager
 
     var body: some View {
         ZStack {
@@ -14,10 +13,6 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     header
                     permissionsOverviewCard
-
-                    if let automationWarningMessage = model.automaticPasteWarningMessage {
-                        automationWarningCard(message: automationWarningMessage)
-                    }
 
                     permissionCards
                     statusCard
@@ -70,7 +65,7 @@ struct ContentView: View {
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(CueTheme.slate)
 
-                Text("Cue checks permissions at launch. Microphone is required for dictation, and Accessibility is optional for automatic paste after Cue restarts.")
+                Text("Cue checks required permissions at launch. Cue only works when microphone, Input Monitoring, and Accessibility are all granted.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(CueTheme.muted)
             } else {
@@ -93,6 +88,7 @@ struct ContentView: View {
     private var permissionCards: some View {
         HStack(alignment: .top, spacing: 16) {
             microphoneCard
+            inputMonitoringCard
             accessibilityCard
         }
     }
@@ -147,13 +143,36 @@ struct ContentView: View {
                 .foregroundStyle(CueTheme.muted)
 
             if let primaryAction = section.primaryAction {
-                HStack(spacing: 10) {
-                    prominentActionButton(primaryAction)
+                prominentActionButton(primaryAction)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
 
-                    if let secondaryAction = section.secondaryAction {
-                        secondaryActionButton(secondaryAction)
-                    }
-                }
+    private var inputMonitoringCard: some View {
+        let state = model.permissionSnapshot.inputMonitoring
+        let section = presentation.setup.inputMonitoring
+
+        return VStack(alignment: .leading, spacing: 14) {
+            cardHeader(
+                title: CuePermissionKind.inputMonitoring.title,
+                summary: CuePermissionKind.inputMonitoring.requirementSummary,
+                statusTitle: state.title,
+                isPositive: state.isGranted
+            )
+
+            Text(CuePermissionKind.inputMonitoring.systemSettingsPath)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(CueTheme.muted)
+
+            Text(section.detail)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(CueTheme.muted)
+
+            if let primaryAction = section.primaryAction {
+                prominentActionButton(primaryAction)
             }
         }
         .padding(20)
@@ -196,7 +215,7 @@ struct ContentView: View {
             HStack {
                 statusTile(title: "Phase", value: model.sessionState.title)
                 statusTile(title: "Model", value: model.modelStatus.title)
-                statusTile(title: "Auto Paste", value: model.permissionSnapshot.accessibility.title)
+                statusTile(title: "Modifier", value: triggerManager.selectedModifierTitle)
             }
 
             if let progressValue = model.modelStatus.progressValue {
@@ -219,20 +238,19 @@ struct ContentView: View {
                 .font(.system(.headline, design: .rounded))
                 .foregroundStyle(CueTheme.ink)
 
-            KeyboardShortcuts.Recorder("Global shortcut", name: .pushToTalk) { shortcut in
-                hotkeyManager.updateShortcutSummary(shortcut)
+            Picker("Hold modifier", selection: $triggerManager.selectedModifier) {
+                ForEach(PushToTalkModifier.allCases) { modifier in
+                    Text(modifier.title).tag(modifier)
+                }
             }
+            .pickerStyle(.segmented)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(
-                    hotkeyManager.hasConfiguredShortcut
-                        ? "Hold \(hotkeyManager.shortcutSummary) in any app to record, then release to transcribe."
-                        : "Set a standard key combination to enable global push-to-talk."
-                )
+                Text(triggerManager.selectedModifier.holdInstruction)
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(CueTheme.slate)
 
-                Text("Bare Fn/Globe is not supported by the current global hotkey API, so use a normal shortcut chord.")
+                Text("Cue listens for the selected modifier globally and starts recording on press, then stops on release.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(CueTheme.muted)
             }
@@ -346,44 +364,13 @@ struct ContentView: View {
         )
     }
 
-    private func automationWarningCard(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(model.permissionSnapshot.canAutoPaste ? "Automation Warning" : "Automatic Paste Off")
-                .font(.system(.headline, design: .rounded))
-                .foregroundStyle(CueTheme.warningInk)
-
-            Text(message)
-                .font(.system(.body, design: .rounded))
-                .foregroundStyle(CueTheme.warningText)
-
-            if !model.permissionSnapshot.canAutoPaste {
-                HStack(spacing: 10) {
-                    prominentActionButton(.openAccessibilitySettings)
-                    secondaryActionButton(.restartApplication)
-                }
-
-                if let accessibilityRestartMessage = model.accessibilityRestartMessage {
-                    Text(accessibilityRestartMessage)
-                        .font(.system(.footnote, design: .rounded))
-                        .foregroundStyle(CueTheme.warningTextMuted)
-                }
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(red: 0.99, green: 0.95, blue: 0.88))
-        )
-    }
-
     private var detailsFooter: some View {
         HStack(spacing: 12) {
             if presentation.shouldOfferModelRetry {
                 prominentActionButton(.retryModelPreparation)
             }
 
-            Text("Cue runs from the menu bar. Open this window when you want visibility into permissions, paste diagnostics, and timing.")
+            Text("Cue runs from the menu bar. Open this window when you want visibility into setup, transcript delivery, and timing.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(CueTheme.muted)
         }
@@ -421,13 +408,6 @@ struct ContentView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(CueTheme.accent)
-    }
-
-    private func secondaryActionButton(_ action: CueAppAction) -> some View {
-        Button(action.title) {
-            model.perform(action)
-        }
-        .buttonStyle(.bordered)
     }
 
     private var cardBackground: some View {

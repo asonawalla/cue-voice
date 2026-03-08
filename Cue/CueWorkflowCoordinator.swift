@@ -71,12 +71,12 @@ final class CueWorkflowCoordinator {
         setupCoordinator.openMicrophoneSettings()
     }
 
-    func openAccessibilitySettings() {
-        setupCoordinator.openAccessibilitySettings()
+    func openInputMonitoringSettings() {
+        setupCoordinator.openInputMonitoringSettings()
     }
 
-    func restartApplication() {
-        setupCoordinator.restartApplication()
+    func openAccessibilitySettings() {
+        setupCoordinator.openAccessibilitySettings()
     }
 
     func handlePushToTalkPressed() async {

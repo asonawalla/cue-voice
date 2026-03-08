@@ -70,12 +70,12 @@ final class FakePermissionService: PermissionService {
     var snapshot: CuePermissionSnapshot
     var currentSnapshotCallCount = 0
     var requestMicrophoneCallCount = 0
+    var requestInputMonitoringCallCount = 0
     var requestAccessibilityCallCount = 0
-    var restartApplicationCallCount = 0
     var openedSettingsPermissions: [CuePermissionKind] = []
     var microphoneRequestResult: CuePermissionState?
 
-    init(snapshot: CuePermissionSnapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)) {
+    init(snapshot: CuePermissionSnapshot = CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .granted)) {
         self.snapshot = snapshot
     }
 
@@ -88,10 +88,18 @@ final class FakePermissionService: PermissionService {
         requestMicrophoneCallCount += 1
 
         if let microphoneRequestResult {
-            snapshot = CuePermissionSnapshot(microphone: microphoneRequestResult, accessibility: snapshot.accessibility)
+            snapshot = CuePermissionSnapshot(
+                microphone: microphoneRequestResult,
+                inputMonitoring: snapshot.inputMonitoring,
+                accessibility: snapshot.accessibility
+            )
         }
 
         return snapshot.microphone
+    }
+
+    func requestInputMonitoringPermission() {
+        requestInputMonitoringCallCount += 1
     }
 
     func requestAccessibilityPermission() {
@@ -101,8 +109,36 @@ final class FakePermissionService: PermissionService {
     func openSystemSettings(for permission: CuePermissionKind) {
         openedSettingsPermissions.append(permission)
     }
+}
 
-    func restartApplication() {
-        restartApplicationCallCount += 1
+@MainActor
+final class FakePushToTalkBindingService: PushToTalkBindingService {
+    var modifier: PushToTalkModifier
+    var setModifierCalls: [PushToTalkModifier] = []
+    var refreshMonitoringCallCount = 0
+
+    private(set) var onPress: (() -> Void)?
+    private(set) var onRelease: (() -> Void)?
+
+    init(modifier: PushToTalkModifier = .function) {
+        self.modifier = modifier
+    }
+
+    func currentModifier() -> PushToTalkModifier {
+        modifier
+    }
+
+    func setModifier(_ modifier: PushToTalkModifier) {
+        self.modifier = modifier
+        setModifierCalls.append(modifier)
+    }
+
+    func startMonitoring(onPress: @escaping () -> Void, onRelease: @escaping () -> Void) {
+        self.onPress = onPress
+        self.onRelease = onRelease
+    }
+
+    func refreshMonitoring() {
+        refreshMonitoringCallCount += 1
     }
 }
