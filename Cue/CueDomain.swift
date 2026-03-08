@@ -1,37 +1,14 @@
 import Foundation
 
-enum CuePhase: String, Equatable {
-    case idle
-    case recording
-    case transcribing
-    case pasting
-    case error
-
-    var title: String {
-        switch self {
-        case .idle:
-            return "Idle"
-        case .recording:
-            return "Recording"
-        case .transcribing:
-            return "Transcribing"
-        case .pasting:
-            return "Pasting"
-        case .error:
-            return "Error"
-        }
-    }
-}
-
 enum CuePermissionKind: CaseIterable, Equatable {
     case microphone
-    case paste
+    case accessibility
 
     var title: String {
         switch self {
         case .microphone:
             return "Microphone"
-        case .paste:
+        case .accessibility:
             return "Accessibility"
         }
     }
@@ -40,7 +17,7 @@ enum CuePermissionKind: CaseIterable, Equatable {
         switch self {
         case .microphone:
             return "Cue needs microphone access to capture your speech."
-        case .paste:
+        case .accessibility:
             return "Cue uses Accessibility to paste automatically into the focused app. After you enable it in System Settings, restart Cue to turn automatic paste on."
         }
     }
@@ -49,7 +26,7 @@ enum CuePermissionKind: CaseIterable, Equatable {
         switch self {
         case .microphone:
             return "System Settings > Privacy & Security > Microphone"
-        case .paste:
+        case .accessibility:
             return "System Settings > Privacy & Security > Accessibility"
         }
     }
@@ -76,34 +53,34 @@ enum CuePermissionState: Equatable {
     }
 }
 
-enum CueAutomationPermissionState: Equatable {
-    case available
+enum CueAccessibilityPermissionState: Equatable {
+    case granted
     case unavailable
 
     var title: String {
         switch self {
-        case .available:
+        case .granted:
             return "Ready"
         case .unavailable:
             return "Clipboard Mode"
         }
     }
 
-    var isAvailable: Bool {
-        self == .available
+    var isGranted: Bool {
+        self == .granted
     }
 }
 
 struct CuePermissionSnapshot: Equatable {
     let microphone: CuePermissionState
-    let paste: CueAutomationPermissionState
+    let accessibility: CueAccessibilityPermissionState
 
     var isMicrophoneReady: Bool {
         microphone.isGranted
     }
 
     var canAutoPaste: Bool {
-        paste.isAvailable
+        accessibility.isGranted
     }
 
     var setupSummary: String {
@@ -186,7 +163,6 @@ struct CueInsertionResult: Equatable {
     let targetAppName: String?
     let targetBundleIdentifier: String?
     let pasteDuration: TimeInterval
-    let clipboardRestoreOutcome: ClipboardRestoreOutcome
 }
 
 enum CueInsertionDelivery: Equatable {
@@ -240,29 +216,6 @@ enum CueClipboardFallbackReason: Equatable {
     }
 }
 
-enum ClipboardRestoreOutcome: Equatable {
-    case restored
-    case skippedBecauseClipboardChanged
-    case skippedBecauseSnapshotUnavailable
-    case notNeededBecauseTranscriptStayedOnClipboard
-    case failed(String)
-
-    var title: String {
-        switch self {
-        case .restored:
-            return "Previous clipboard restored"
-        case .skippedBecauseClipboardChanged:
-            return "Skipped restore because the clipboard changed"
-        case .skippedBecauseSnapshotUnavailable:
-            return "Skipped restore because Cue could not snapshot the clipboard"
-        case .notNeededBecauseTranscriptStayedOnClipboard:
-            return "Transcript left on the clipboard for manual paste"
-        case .failed(let message):
-            return "Cue could not restore the previous clipboard contents: \(message)"
-        }
-    }
-}
-
 struct LatencyMetrics: Equatable {
     let recordingDuration: TimeInterval
     let transcriptionDuration: TimeInterval
@@ -281,6 +234,7 @@ enum CueError: LocalizedError, Equatable {
     case noRecordingInProgress
     case recordingTooShort(actual: TimeInterval, minimum: TimeInterval)
     case modelDownloadFailed(String)
+    case modelLoadFailed(String)
     case transcriptionFailed(String)
     case emptyTranscript
     case noFrontmostApplication
@@ -290,6 +244,15 @@ enum CueError: LocalizedError, Equatable {
     var isPermissionRelated: Bool {
         switch self {
         case .microphonePermissionDenied:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isModelPreparationRelated: Bool {
+        switch self {
+        case .modelDownloadFailed, .modelLoadFailed:
             return true
         default:
             return false
@@ -314,6 +277,8 @@ enum CueError: LocalizedError, Equatable {
             return "Recording was too short (\(actual.formattedSeconds)); hold for at least \(minimum.formattedSeconds)."
         case .modelDownloadFailed(let message):
             return "Cue could not prepare the base.en model: \(message)"
+        case .modelLoadFailed(let message):
+            return "Cue could not load the base.en model: \(message)"
         case .transcriptionFailed(let message):
             return "Cue could not transcribe the recording: \(message)"
         case .emptyTranscript:
@@ -325,6 +290,104 @@ enum CueError: LocalizedError, Equatable {
         case .pasteFailed(let message):
             return "Cue could not paste the transcript: \(message)"
         }
+    }
+}
+
+enum CueSessionState: Equatable {
+    case idle
+    case recording
+    case transcribing
+    case pasting
+    case failed(CueFailure)
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Idle"
+        case .recording:
+            return "Recording"
+        case .transcribing:
+            return "Transcribing"
+        case .pasting:
+            return "Pasting"
+        case .failed:
+            return "Error"
+        }
+    }
+
+    var isBusy: Bool {
+        switch self {
+        case .recording, .transcribing, .pasting:
+            return true
+        case .idle, .failed:
+            return false
+        }
+    }
+}
+
+struct CueFailure: Equatable {
+    let cueError: CueError?
+    let message: String
+
+    var isPermissionRelated: Bool {
+        cueError?.isPermissionRelated ?? false
+    }
+
+    static func from(_ error: Error) -> CueFailure {
+        let cueError = error as? CueError
+        let message: String
+
+        if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
+            message = description
+        } else {
+            message = error.localizedDescription
+        }
+
+        return CueFailure(cueError: cueError, message: message)
+    }
+}
+
+struct CueSetupState: Equatable {
+    var permissions: CuePermissionSnapshot
+    var hasLoadedPermissions: Bool
+    var modelStatus: ModelPreparationStatus
+}
+
+struct CueAppState: Equatable {
+    var setup: CueSetupState
+    var session: CueSessionState
+    var transcript: String
+    var lastInsertionResult: CueInsertionResult?
+    var latencyMetrics: LatencyMetrics?
+
+    static func initial(permissionSnapshot: CuePermissionSnapshot) -> CueAppState {
+        CueAppState(
+            setup: CueSetupState(
+                permissions: permissionSnapshot,
+                hasLoadedPermissions: true,
+                modelStatus: .idle
+            ),
+            session: .idle,
+            transcript: "",
+            lastInsertionResult: nil,
+            latencyMetrics: nil
+        )
+    }
+
+    var currentFailure: CueFailure? {
+        guard case .failed(let failure) = session else {
+            return nil
+        }
+
+        return failure
+    }
+
+    var isReadyToRecord: Bool {
+        setup.hasLoadedPermissions && setup.permissions.isMicrophoneReady
+    }
+
+    var isModelReady: Bool {
+        setup.modelStatus.isReady
     }
 }
 

@@ -5,24 +5,9 @@ struct ContentView: View {
     @Bindable var model: CueAppModel
     @Bindable var hotkeyManager: CueHotkeyManager
 
-    private let ink = Color(red: 0.12, green: 0.17, blue: 0.25)
-    private let slate = Color(red: 0.34, green: 0.40, blue: 0.50)
-    private let muted = Color(red: 0.47, green: 0.53, blue: 0.61)
-    private let accent = Color(red: 0.16, green: 0.42, blue: 0.66)
-    private let cardFill = Color(red: 0.98, green: 0.99, blue: 1.00)
-    private let success = Color(red: 0.15, green: 0.45, blue: 0.27)
-    private let warning = Color(red: 0.74, green: 0.29, blue: 0.08)
-
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.93, green: 0.95, blue: 0.98),
-                    Color(red: 0.84, green: 0.89, blue: 0.95)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            CueTheme.backgroundGradient
             .ignoresSafeArea()
 
             ScrollView {
@@ -48,19 +33,25 @@ struct ContentView: View {
                     detailsFooter
                 }
                 .padding(28)
+                .accessibilityIdentifier("cue.mainWindow.root")
             }
         }
+    }
+
+    private var presentation: CueAppPresentation {
+        model.presentation
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Cue")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
+                .accessibilityIdentifier("cue.mainWindow.title")
 
             Text(headerSubtitle)
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(slate)
+                .foregroundStyle(CueTheme.slate)
         }
     }
 
@@ -72,25 +63,25 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Permissions")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             if model.hasLoadedPermissionSnapshot {
-                Text(model.permissionSnapshot.setupSummary)
+                Text(presentation.setup.statusSummary)
                     .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
+                    .foregroundStyle(CueTheme.slate)
 
                 Text("Cue checks permissions at launch. Microphone is required for dictation, and Accessibility is optional for automatic paste after Cue restarts.")
                     .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
+                    .foregroundStyle(CueTheme.muted)
             } else {
                 HStack(spacing: 10) {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(accent)
+                        .tint(CueTheme.accent)
 
                     Text("Cue is checking the current permission state.")
                         .font(.system(.body, design: .rounded))
-                        .foregroundStyle(slate)
+                        .foregroundStyle(CueTheme.slate)
                 }
             }
         }
@@ -108,6 +99,7 @@ struct ContentView: View {
 
     private var microphoneCard: some View {
         let state = model.permissionSnapshot.microphone
+        let section = presentation.setup.microphone
 
         return VStack(alignment: .leading, spacing: 14) {
             cardHeader(
@@ -119,26 +111,14 @@ struct ContentView: View {
 
             Text(CuePermissionKind.microphone.systemSettingsPath)
                 .font(.system(.footnote, design: .rounded))
-                .foregroundStyle(muted)
+                .foregroundStyle(CueTheme.muted)
 
-            if state == .notDetermined {
-                Button("Grant Microphone Access") {
-                    Task {
-                        await model.requestMicrophonePermission()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
-            } else if state == .denied {
-                Button("Open Microphone Settings") {
-                    model.openMicrophoneSettings()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
-            } else {
-                Text("Cue can start recording when you hold the shortcut.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
+            Text(section.detail)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(CueTheme.muted)
+
+            if let primaryAction = section.primaryAction {
+                prominentActionButton(primaryAction)
             }
         }
         .padding(20)
@@ -147,45 +127,33 @@ struct ContentView: View {
     }
 
     private var accessibilityCard: some View {
-        let state = model.permissionSnapshot.paste
+        let state = model.permissionSnapshot.accessibility
+        let section = presentation.setup.accessibility
 
         return VStack(alignment: .leading, spacing: 14) {
             cardHeader(
-                title: CuePermissionKind.paste.title,
-                summary: CuePermissionKind.paste.requirementSummary,
+                title: CuePermissionKind.accessibility.title,
+                summary: CuePermissionKind.accessibility.requirementSummary,
                 statusTitle: state.title,
-                isPositive: state.isAvailable
+                isPositive: state.isGranted
             )
 
-            Text(CuePermissionKind.paste.systemSettingsPath)
+            Text(CuePermissionKind.accessibility.systemSettingsPath)
                 .font(.system(.footnote, design: .rounded))
-                .foregroundStyle(muted)
+                .foregroundStyle(CueTheme.muted)
 
-            if !model.permissionSnapshot.isMicrophoneReady {
-                Text("Finish microphone setup first. Then you can optionally enable Accessibility for automatic paste.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
-            } else if !state.isAvailable {
+            Text(section.detail)
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(CueTheme.muted)
+
+            if let primaryAction = section.primaryAction {
                 HStack(spacing: 10) {
-                    Button("Open Accessibility Settings") {
-                        model.openAccessibilitySettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(accent)
+                    prominentActionButton(primaryAction)
 
-                    Button("Restart Cue") {
-                        model.restartApplication()
+                    if let secondaryAction = section.secondaryAction {
+                        secondaryActionButton(secondaryAction)
                     }
-                    .buttonStyle(.bordered)
                 }
-
-                Text(model.accessibilityRestartMessage ?? "Cue still works without this. Until Accessibility is enabled and Cue restarts, transcripts stay on the clipboard for manual paste.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
-            } else {
-                Text("Cue can synthesize Command-V into the focused destination app.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
             }
         }
         .padding(20)
@@ -198,23 +166,23 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(.headline, design: .rounded))
-                    .foregroundStyle(ink)
+                    .foregroundStyle(CueTheme.ink)
 
                 Text(summary)
                     .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
+                    .foregroundStyle(CueTheme.slate)
             }
 
             Spacer(minLength: 12)
 
             Text(statusTitle)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(isPositive ? success : warning)
+                .foregroundStyle(isPositive ? CueTheme.success : CueTheme.warning)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     Capsule(style: .continuous)
-                        .fill((isPositive ? success : warning).opacity(0.12))
+                        .fill((isPositive ? CueTheme.success : CueTheme.warning).opacity(0.12))
                 )
         }
     }
@@ -223,21 +191,21 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Status")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             HStack {
-                statusTile(title: "Phase", value: model.phase.title)
+                statusTile(title: "Phase", value: model.sessionState.title)
                 statusTile(title: "Model", value: model.modelStatus.title)
-                statusTile(title: "Auto Paste", value: model.permissionSnapshot.paste.title)
+                statusTile(title: "Auto Paste", value: model.permissionSnapshot.accessibility.title)
             }
 
             if let progressValue = model.modelStatus.progressValue {
                 ProgressView(value: progressValue)
-                    .tint(accent)
+                    .tint(CueTheme.accent)
             } else if model.isModelPreparing {
                 ProgressView()
                     .controlSize(.small)
-                    .tint(accent)
+                    .tint(CueTheme.accent)
             }
         }
         .padding(20)
@@ -249,7 +217,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Push to Talk")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             KeyboardShortcuts.Recorder("Global shortcut", name: .pushToTalk) { shortcut in
                 hotkeyManager.updateShortcutSummary(shortcut)
@@ -262,11 +230,11 @@ struct ContentView: View {
                         : "Set a standard key combination to enable global push-to-talk."
                 )
                 .font(.system(.footnote, design: .rounded))
-                .foregroundStyle(slate)
+                .foregroundStyle(CueTheme.slate)
 
                 Text("Bare Fn/Globe is not supported by the current global hotkey API, so use a normal shortcut chord.")
                     .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(muted)
+                    .foregroundStyle(CueTheme.muted)
             }
         }
         .padding(20)
@@ -278,13 +246,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transcript")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             ScrollView {
                 Text(model.transcript.isEmpty ? "Your transcript will appear here after you stop recording." : model.transcript)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                    .foregroundStyle(model.transcript.isEmpty ? slate : ink)
+                    .foregroundStyle(model.transcript.isEmpty ? CueTheme.slate : CueTheme.ink)
                     .padding(.top, 2)
             }
             .frame(minHeight: 180)
@@ -298,7 +266,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Last Insertion")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             if let insertionResult = model.lastInsertionResult {
                 HStack {
@@ -314,21 +282,17 @@ struct ContentView: View {
 
                 Text(insertionResult.delivery.detail)
                     .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
-
-                Text(insertionResult.clipboardRestoreOutcome.title)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(slate)
+                    .foregroundStyle(CueTheme.slate)
 
                 if let bundleIdentifier = insertionResult.targetBundleIdentifier {
                     Text(bundleIdentifier)
                         .font(.system(.footnote, design: .monospaced))
-                        .foregroundStyle(muted)
+                        .foregroundStyle(CueTheme.muted)
                         .textSelection(.enabled)
                 }
             } else {
                 Text("Finish a push-to-talk pass to see whether Cue sent the paste command or left the transcript on the clipboard.")
-                    .foregroundStyle(slate)
+                    .foregroundStyle(CueTheme.slate)
             }
         }
         .padding(20)
@@ -340,7 +304,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Latency")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
 
             if let metrics = model.latencyMetrics {
                 HStack {
@@ -356,7 +320,7 @@ struct ContentView: View {
                 }
             } else {
                 Text("Run a short utterance to populate latency metrics.")
-                    .foregroundStyle(slate)
+                    .foregroundStyle(CueTheme.slate)
             }
         }
         .padding(20)
@@ -368,10 +332,10 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Last Error")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(Color(red: 0.49, green: 0.16, blue: 0.15))
+                .foregroundStyle(CueTheme.errorInk)
 
             Text(message)
-                .foregroundStyle(Color(red: 0.37, green: 0.12, blue: 0.11))
+                .foregroundStyle(CueTheme.errorText)
                 .textSelection(.enabled)
         }
         .padding(20)
@@ -386,30 +350,22 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.permissionSnapshot.canAutoPaste ? "Automation Warning" : "Automatic Paste Off")
                 .font(.system(.headline, design: .rounded))
-                .foregroundStyle(Color(red: 0.49, green: 0.25, blue: 0.05))
+                .foregroundStyle(CueTheme.warningInk)
 
             Text(message)
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(Color(red: 0.38, green: 0.22, blue: 0.07))
+                .foregroundStyle(CueTheme.warningText)
 
             if !model.permissionSnapshot.canAutoPaste {
                 HStack(spacing: 10) {
-                    Button("Open Accessibility Settings") {
-                        model.openAccessibilitySettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(accent)
-
-                    Button("Restart Cue") {
-                        model.restartApplication()
-                    }
-                    .buttonStyle(.bordered)
+                    prominentActionButton(.openAccessibilitySettings)
+                    secondaryActionButton(.restartApplication)
                 }
 
                 if let accessibilityRestartMessage = model.accessibilityRestartMessage {
                     Text(accessibilityRestartMessage)
                         .font(.system(.footnote, design: .rounded))
-                        .foregroundStyle(Color(red: 0.45, green: 0.28, blue: 0.08))
+                        .foregroundStyle(CueTheme.warningTextMuted)
                 }
             }
         }
@@ -423,19 +379,13 @@ struct ContentView: View {
 
     private var detailsFooter: some View {
         HStack(spacing: 12) {
-            if model.shouldOfferModelRetry {
-                Button("Retry Model Preparation") {
-                    Task {
-                        await model.retryModelPreparation()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
+            if presentation.shouldOfferModelRetry {
+                prominentActionButton(.retryModelPreparation)
             }
 
             Text("Cue runs from the menu bar. Open this window when you want visibility into permissions, paste diagnostics, and timing.")
                 .font(.system(.footnote, design: .rounded))
-                .foregroundStyle(muted)
+                .foregroundStyle(CueTheme.muted)
         }
     }
 
@@ -443,11 +393,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(slate)
+                .foregroundStyle(CueTheme.slate)
 
             Text(value)
                 .font(.system(.title3, design: .rounded).weight(.semibold))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -456,18 +406,33 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(slate)
+                .foregroundStyle(CueTheme.slate)
 
             Text(value)
                 .font(.system(.body, design: .monospaced).weight(.medium))
-                .foregroundStyle(ink)
+                .foregroundStyle(CueTheme.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func prominentActionButton(_ action: CueAppAction) -> some View {
+        Button(action.title) {
+            model.perform(action)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(CueTheme.accent)
+    }
+
+    private func secondaryActionButton(_ action: CueAppAction) -> some View {
+        Button(action.title) {
+            model.perform(action)
+        }
+        .buttonStyle(.bordered)
+    }
+
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(cardFill)
+            .fill(CueTheme.cardFill)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.white.opacity(0.96), lineWidth: 1)

@@ -1,9 +1,10 @@
 import AppKit
+import Foundation
 import KeyboardShortcuts
 import Observation
 import os
 
-private let defaultPushToTalkShortcut = KeyboardShortcuts.Shortcut(.d, modifiers: [.control, .option])
+let defaultPushToTalkShortcut = KeyboardShortcuts.Shortcut(.d, modifiers: [.control, .option])
 private let unsupportedFunctionShortcut = KeyboardShortcuts.Shortcut(.function)
 
 extension KeyboardShortcuts.Name {
@@ -11,6 +12,55 @@ extension KeyboardShortcuts.Name {
         "pushToTalk",
         default: defaultPushToTalkShortcut
     )
+}
+
+protocol HotkeyBindingService: AnyObject {
+    func currentShortcut() -> KeyboardShortcuts.Shortcut?
+    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?)
+    func registerKeyDown(_ action: @escaping () -> Void)
+    func registerKeyUp(_ action: @escaping () -> Void)
+}
+
+final class LiveHotkeyBindingService: HotkeyBindingService {
+    func currentShortcut() -> KeyboardShortcuts.Shortcut? {
+        KeyboardShortcuts.getShortcut(for: .pushToTalk)
+    }
+
+    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        KeyboardShortcuts.setShortcut(shortcut, for: .pushToTalk)
+    }
+
+    func registerKeyDown(_ action: @escaping () -> Void) {
+        KeyboardShortcuts.onKeyDown(for: .pushToTalk, action: action)
+    }
+
+    func registerKeyUp(_ action: @escaping () -> Void) {
+        KeyboardShortcuts.onKeyUp(for: .pushToTalk, action: action)
+    }
+}
+
+final class DisabledHotkeyBindingService: HotkeyBindingService {
+    private var shortcut: KeyboardShortcuts.Shortcut?
+
+    init(shortcut: KeyboardShortcuts.Shortcut? = defaultPushToTalkShortcut) {
+        self.shortcut = shortcut
+    }
+
+    func currentShortcut() -> KeyboardShortcuts.Shortcut? {
+        shortcut
+    }
+
+    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        self.shortcut = shortcut
+    }
+
+    func registerKeyDown(_ action: @escaping () -> Void) {
+        _ = action
+    }
+
+    func registerKeyUp(_ action: @escaping () -> Void) {
+        _ = action
+    }
 }
 
 @MainActor
@@ -21,6 +71,7 @@ final class CueHotkeyManager {
 
     private weak var appModel: CueAppModel?
     private let defaults: UserDefaults
+    private let bindingService: HotkeyBindingService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Hotkey")
 
     private static let initializationFlagKey = "Cue.pushToTalkShortcutInitialized"
@@ -28,21 +79,23 @@ final class CueHotkeyManager {
 
     init(
         appModel: CueAppModel,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        bindingService: HotkeyBindingService? = nil
     ) {
         self.appModel = appModel
         self.defaults = defaults
+        self.bindingService = bindingService ?? LiveHotkeyBindingService()
         shortcutSummary = "Not configured"
         hasConfiguredShortcut = false
 
         migrateUnsupportedFunctionShortcutIfNeeded()
         initializeShortcutIfNeeded()
 
-        let currentShortcut = KeyboardShortcuts.getShortcut(for: .pushToTalk)
+        let currentShortcut = self.bindingService.currentShortcut()
         shortcutSummary = Self.describe(currentShortcut)
         hasConfiguredShortcut = currentShortcut != nil
 
-        KeyboardShortcuts.onKeyDown(for: .pushToTalk) { [weak self] in
+        self.bindingService.registerKeyDown { [weak self] in
             guard let self, let appModel = self.appModel else {
                 return
             }
@@ -52,7 +105,7 @@ final class CueHotkeyManager {
             }
         }
 
-        KeyboardShortcuts.onKeyUp(for: .pushToTalk) { [weak self] in
+        self.bindingService.registerKeyUp { [weak self] in
             guard let self, let appModel = self.appModel else {
                 return
             }
@@ -82,11 +135,11 @@ final class CueHotkeyManager {
             defaults.set(true, forKey: Self.initializationFlagKey)
         }
 
-        guard KeyboardShortcuts.getShortcut(for: .pushToTalk) == nil else {
+        guard bindingService.currentShortcut() == nil else {
             return
         }
 
-        KeyboardShortcuts.setShortcut(defaultPushToTalkShortcut, for: .pushToTalk)
+        bindingService.setShortcut(defaultPushToTalkShortcut)
         logger.info("Initialized push-to-talk shortcut to the supported default")
     }
 
@@ -99,11 +152,11 @@ final class CueHotkeyManager {
             defaults.set(true, forKey: Self.unsupportedShortcutMigrationFlagKey)
         }
 
-        guard KeyboardShortcuts.getShortcut(for: .pushToTalk) == unsupportedFunctionShortcut else {
+        guard bindingService.currentShortcut() == unsupportedFunctionShortcut else {
             return
         }
 
-        KeyboardShortcuts.setShortcut(defaultPushToTalkShortcut, for: .pushToTalk)
+        bindingService.setShortcut(defaultPushToTalkShortcut)
         logger.info("Migrated push-to-talk shortcut from unsupported fn to the supported default")
     }
 }
