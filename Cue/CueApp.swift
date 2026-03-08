@@ -4,15 +4,15 @@ import SwiftUI
 @main
 struct CueApp: App {
     @State private var model: CueAppModel
-    @State private var triggerManager: CueTriggerManager
+    @State private var hotkeyManager: CueHotkeyManager
 
     init() {
         let environment = CueAppEnvironment.make()
         let model = environment.model
-        let triggerManager = environment.triggerManager
+        let hotkeyManager = environment.hotkeyManager
 
         _model = State(initialValue: model)
-        _triggerManager = State(initialValue: triggerManager)
+        _hotkeyManager = State(initialValue: hotkeyManager)
 
         Task { @MainActor in
             if CueAppEnvironment.isUITesting || model.needsPermissionPrompt {
@@ -34,12 +34,12 @@ struct CueApp: App {
         Window("Finish Setup", id: CueSceneID.permissionsWindow) {
             CuePermissionsPromptView(model: model)
         }
-        .defaultSize(width: 460, height: 560)
+        .defaultSize(width: 460, height: 420)
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(model.needsPermissionPrompt ? .presented : .suppressed)
 
         Window("Cue", id: CueSceneID.mainWindow) {
-            ContentView(model: model, triggerManager: triggerManager)
+            ContentView(model: model, hotkeyManager: hotkeyManager)
                 .frame(minWidth: 760, minHeight: 760)
         }
         .defaultSize(width: 900, height: 820)
@@ -52,7 +52,16 @@ private struct CueMenuBarLabelView: View {
     @Bindable var model: CueAppModel
 
     var body: some View {
-        Image(systemName: model.menuBarSymbolName)
-            .accessibilityLabel(model.menuBarPrimaryStatus)
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: model.menuBarSymbolName)
+                .accessibilityLabel(model.menuBarPrimaryStatus)
+
+            if model.showsAutomaticPasteIndicator {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 7, height: 7)
+                    .offset(x: 3, y: -2)
+            }
+        }
     }
 }

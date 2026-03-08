@@ -3,7 +3,7 @@ import Foundation
 
 struct CueAppEnvironment {
     let model: CueAppModel
-    let triggerManager: CueTriggerManager
+    let hotkeyManager: CueHotkeyManager
 
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(CueAppConfiguration.uiTestingLaunchArgument)
@@ -19,56 +19,42 @@ struct CueAppEnvironment {
                 insertionService: UITestTextInsertionService(),
                 permissionService: UITestPermissionService()
             )
-            let triggerManager = CueTriggerManager(
+            let hotkeyManager = CueHotkeyManager(
                 appModel: model,
-                bindingService: DisabledPushToTalkBindingService()
+                bindingService: DisabledHotkeyBindingService()
             )
 
-            return CueAppEnvironment(model: model, triggerManager: triggerManager)
+            return CueAppEnvironment(model: model, hotkeyManager: hotkeyManager)
         }
 
         let model = CueAppModel()
-        let triggerManager = CueTriggerManager(appModel: model)
-        return CueAppEnvironment(model: model, triggerManager: triggerManager)
+        let hotkeyManager = CueHotkeyManager(appModel: model)
+        return CueAppEnvironment(model: model, hotkeyManager: hotkeyManager)
     }
 }
 
 @MainActor
 private final class UITestPermissionService: PermissionService {
-    private var snapshot = CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .granted)
+    private var snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
 
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
         snapshot
     }
 
     func requestMicrophonePermission() async -> CuePermissionState {
-        snapshot = CuePermissionSnapshot(
-            microphone: .granted,
-            inputMonitoring: snapshot.inputMonitoring,
-            accessibility: snapshot.accessibility
-        )
+        snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: snapshot.accessibility)
         return .granted
     }
 
-    func requestInputMonitoringPermission() {
-        snapshot = CuePermissionSnapshot(
-            microphone: snapshot.microphone,
-            inputMonitoring: .granted,
-            accessibility: snapshot.accessibility
-        )
-    }
-
     func requestAccessibilityPermission() {
-        snapshot = CuePermissionSnapshot(
-            microphone: snapshot.microphone,
-            inputMonitoring: snapshot.inputMonitoring,
-            accessibility: .granted
-        )
+        snapshot = CuePermissionSnapshot(microphone: snapshot.microphone, accessibility: .granted)
     }
 
     func openSystemSettings(for permission: CuePermissionKind) {
         _ = permission
     }
+
+    func restartApplication() {}
 }
 
 @MainActor

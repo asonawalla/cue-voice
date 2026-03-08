@@ -2,15 +2,12 @@ import Foundation
 
 enum CuePermissionKind: CaseIterable, Equatable {
     case microphone
-    case inputMonitoring
     case accessibility
 
     var title: String {
         switch self {
         case .microphone:
             return "Microphone"
-        case .inputMonitoring:
-            return "Input Monitoring"
         case .accessibility:
             return "Accessibility"
         }
@@ -20,10 +17,8 @@ enum CuePermissionKind: CaseIterable, Equatable {
         switch self {
         case .microphone:
             return "Cue needs microphone access to capture your speech."
-        case .inputMonitoring:
-            return "Cue needs Input Monitoring so it can listen for your push-to-talk modifier in any app."
         case .accessibility:
-            return "Cue needs Accessibility so it can paste the transcript into the focused app when recording finishes."
+            return "Cue uses Accessibility to paste automatically into the focused app. After you enable it in System Settings, restart Cue to turn automatic paste on."
         }
     }
 
@@ -31,8 +26,6 @@ enum CuePermissionKind: CaseIterable, Equatable {
         switch self {
         case .microphone:
             return "System Settings > Privacy & Security > Microphone"
-        case .inputMonitoring:
-            return "System Settings > Privacy & Security > Input Monitoring"
         case .accessibility:
             return "System Settings > Privacy & Security > Accessibility"
         }
@@ -60,16 +53,16 @@ enum CuePermissionState: Equatable {
     }
 }
 
-enum CueSystemPermissionState: Equatable {
+enum CueAccessibilityPermissionState: Equatable {
     case granted
     case unavailable
 
     var title: String {
         switch self {
         case .granted:
-            return "Granted"
+            return "Ready"
         case .unavailable:
-            return "Not Ready"
+            return "Clipboard Mode"
         }
     }
 
@@ -80,65 +73,26 @@ enum CueSystemPermissionState: Equatable {
 
 struct CuePermissionSnapshot: Equatable {
     let microphone: CuePermissionState
-    let inputMonitoring: CueSystemPermissionState
-    let accessibility: CueSystemPermissionState
+    let accessibility: CueAccessibilityPermissionState
 
     var isMicrophoneReady: Bool {
         microphone.isGranted
-    }
-
-    var canMonitorInput: Bool {
-        inputMonitoring.isGranted
     }
 
     var canAutoPaste: Bool {
         accessibility.isGranted
     }
 
-    var isFullyReady: Bool {
-        isMicrophoneReady && canMonitorInput && canAutoPaste
-    }
-
-    var missingPermissions: [CuePermissionKind] {
-        var permissions: [CuePermissionKind] = []
-
-        if !isMicrophoneReady {
-            permissions.append(.microphone)
-        }
-
-        if !canMonitorInput {
-            permissions.append(.inputMonitoring)
-        }
-
-        if !canAutoPaste {
-            permissions.append(.accessibility)
-        }
-
-        return permissions
-    }
-
-    var primaryBlockingPermission: CuePermissionKind? {
-        missingPermissions.first
-    }
-
     var setupSummary: String {
-        guard !isFullyReady else {
-            return "Cue is ready to listen, transcribe, and paste automatically."
+        guard isMicrophoneReady else {
+            return "Cue needs microphone access before dictation can run. Accessibility is optional and turns on automatic paste after Cue restarts."
         }
 
-        if missingPermissions == [.microphone] {
-            return "Cue needs microphone access before push-to-talk can run."
+        guard canAutoPaste else {
+            return "Cue can already record and transcribe. Enable Accessibility in System Settings, then restart Cue if you want automatic paste; until then Cue stays in clipboard mode."
         }
 
-        if missingPermissions == [.inputMonitoring] {
-            return "Cue needs Input Monitoring before it can listen for the selected push-to-talk modifier globally."
-        }
-
-        if missingPermissions == [.accessibility] {
-            return "Cue needs Accessibility before it can paste transcripts into the focused app."
-        }
-
-        return "Cue needs microphone, Input Monitoring, and Accessibility before push-to-talk can run."
+        return "Cue can record, transcribe, and paste automatically."
     }
 }
 
@@ -251,7 +205,7 @@ enum CueClipboardFallbackReason: Equatable {
     var description: String {
         switch self {
         case .accessibilityPermissionMissing:
-            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste."
+            return "Automatic paste is unavailable. Cue copied the transcript to the clipboard for manual paste. If you just enabled Accessibility, restart Cue to turn automatic paste on."
         case .noFrontmostApplication:
             return "Cue could not determine a destination app, so it copied the transcript to the clipboard."
         case .targetWasCue:
@@ -274,8 +228,6 @@ struct LatencyMetrics: Equatable {
 enum CueError: LocalizedError, Equatable {
     case busy
     case microphonePermissionDenied
-    case inputMonitoringPermissionDenied
-    case accessibilityPermissionDenied
     case missingMicrophoneInput
     case recordingFailed(String)
     case recordingAlreadyInProgress
@@ -291,7 +243,7 @@ enum CueError: LocalizedError, Equatable {
 
     var isPermissionRelated: Bool {
         switch self {
-        case .microphonePermissionDenied, .inputMonitoringPermissionDenied, .accessibilityPermissionDenied:
+        case .microphonePermissionDenied:
             return true
         default:
             return false
@@ -313,10 +265,6 @@ enum CueError: LocalizedError, Equatable {
             return "Cue is already handling another action."
         case .microphonePermissionDenied:
             return "Cue needs microphone access before it can record audio. Allow Cue in System Settings > Privacy & Security > Microphone."
-        case .inputMonitoringPermissionDenied:
-            return "Cue needs Input Monitoring before it can listen for the selected push-to-talk modifier. Allow Cue in System Settings > Privacy & Security > Input Monitoring."
-        case .accessibilityPermissionDenied:
-            return "Cue needs Accessibility before it can paste transcripts into the focused app. Allow Cue in System Settings > Privacy & Security > Accessibility."
         case .missingMicrophoneInput:
             return "Cue could not find a usable microphone input device."
         case .recordingFailed(let message):
@@ -435,7 +383,7 @@ struct CueAppState: Equatable {
     }
 
     var isReadyToRecord: Bool {
-        setup.hasLoadedPermissions && setup.permissions.isFullyReady
+        setup.hasLoadedPermissions && setup.permissions.isMicrophoneReady
     }
 
     var isModelReady: Bool {

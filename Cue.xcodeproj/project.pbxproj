@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */; };
 		9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +32,7 @@
 		05A71C932F5A93C3009A5F0F /* Cue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cue.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A71CA02F5A93C4009A5F0F /* CueTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MVP_ROADMAP.md; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C6 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D1 /* Project-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Base.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Debug.xcconfig"; sourceTree = "<group>"; };
@@ -63,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */,
 				9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -88,22 +91,13 @@
 			isa = PBXGroup;
 			children = (
 				1A2B3C4D5E6F708192A3B4C6 /* README.md */,
+				1A2B3C4D5E6F708192A3B4C5 /* MVP_ROADMAP.md */,
 				1A2B3C4D5E6F708192A3B4D0 /* Config */,
 				05A71C952F5A93C3009A5F0F /* Cue */,
 				05A71CA32F5A93C4009A5F0F /* CueTests */,
 				05A71CAD2F5A93C4009A5F0F /* CueUITests */,
 				05A71C942F5A93C3009A5F0F /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		05A71C942F5A93C3009A5F0F /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				05A71C932F5A93C3009A5F0F /* Cue.app */,
-				05A71CA02F5A93C4009A5F0F /* CueTests.xctest */,
-				05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		1A2B3C4D5E6F708192A3B4D0 /* Config */ = {
@@ -117,6 +111,16 @@
 				1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		05A71C942F5A93C3009A5F0F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				05A71C932F5A93C3009A5F0F /* Cue.app */,
+				05A71CA02F5A93C4009A5F0F /* CueTests.xctest */,
+				05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -139,6 +143,7 @@
 			);
 			name = Cue;
 			packageProductDependencies = (
+				2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */,
 				9A1B2C3D4E5F60718293A4B4 /* WhisperKit */,
 			);
 			productName = Cue;
@@ -224,6 +229,7 @@
 			mainGroup = 05A71C8A2F5A93C3009A5F0F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -449,7 +455,10 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				OTHER_CODE_SIGN_FLAGS = "-r $(SRCROOT)/build-support/CueDesignatedRequirement.txt";
+				OTHER_CODE_SIGN_FLAGS = (
+					"-r",
+					"$(SRCROOT)/build-support/CueDesignatedRequirement.txt",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.sonawalla.Cue;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -625,6 +634,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.9.4;
+			};
+		};
 		9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -636,6 +653,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
 		9A1B2C3D4E5F60718293A4B4 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */;

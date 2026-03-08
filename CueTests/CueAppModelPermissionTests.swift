@@ -8,7 +8,7 @@ struct CueAppModelPermissionTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, inputMonitoring: .granted, accessibility: .granted)
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
         )
         permissionService.microphoneRequestResult = .granted
 
@@ -33,7 +33,7 @@ struct CueAppModelPermissionTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, inputMonitoring: .granted, accessibility: .granted)
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
         )
         permissionService.microphoneRequestResult = .granted
 
@@ -58,7 +58,7 @@ struct CueAppModelPermissionTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .denied, inputMonitoring: .granted, accessibility: .granted)
+            snapshot: CuePermissionSnapshot(microphone: .denied, accessibility: .unavailable)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -74,31 +74,11 @@ struct CueAppModelPermissionTests {
         #expect(model.errorMessage == CueError.microphonePermissionDenied.errorDescription)
     }
 
-    @Test func pushToTalkWithMissingInputMonitoringShowsErrorWithoutStartingRecording() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .unavailable, accessibility: .granted)
-        )
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
-
-        await model.launch()
-        await model.handlePushToTalkPressed()
-
-        #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.errorMessage == CueError.inputMonitoringPermissionDenied.errorDescription)
-    }
-
     @Test func grantingMicrophonePermissionWarmsTheModelEvenWhenAccessibilityIsUnavailable() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, inputMonitoring: .granted, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -113,39 +93,19 @@ struct CueAppModelPermissionTests {
         await model.requestMicrophonePermission()
 
         #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(!model.isReadyToRecord)
+        #expect(model.isReadyToRecord)
         #expect(transcriptionService.prepareCallCount == 1)
         #expect(model.isModelReady)
         #expect(!model.permissionSnapshot.canAutoPaste)
         #expect(model.needsPermissionPrompt)
-        #expect(model.menuBarPrimaryStatus == "Accessibility Required")
-    }
-
-    @Test func openingInputMonitoringSettingsRequestsAccessBeforeShowingSystemSettings() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .unavailable, accessibility: .granted)
-        )
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
-
-        await model.launch()
-        model.openInputMonitoringSettings()
-
-        #expect(permissionService.requestInputMonitoringCallCount == 1)
-        #expect(permissionService.openedSettingsPermissions == [.inputMonitoring])
+        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts.")
     }
 
     @Test func openingAccessibilitySettingsRequestsAccessBeforeShowingSystemSettings() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -159,5 +119,24 @@ struct CueAppModelPermissionTests {
 
         #expect(permissionService.requestAccessibilityCallCount == 1)
         #expect(permissionService.openedSettingsPermissions == [.accessibility])
+    }
+
+    @Test func restartApplicationDelegatesToPermissionService() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        model.restartApplication()
+
+        #expect(permissionService.restartApplicationCallCount == 1)
     }
 }

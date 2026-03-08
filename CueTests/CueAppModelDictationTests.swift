@@ -45,12 +45,14 @@ struct CueAppModelDictationTests {
         #expect(insertionService.insertCallCount == 1)
     }
 
-    @Test func pasteFallbackKeepsTranscriptAndReturnsToIdle() async throws {
+    @Test func clipboardFallbackKeepsTranscriptAndReturnsToIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
+        )
         insertionService.result = CueInsertionResult(
-            delivery: .copiedToClipboard(.postEventSubmissionFailed("paste failed")),
+            delivery: .copiedToClipboard(.accessibilityPermissionMissing),
             targetAppName: "TextEdit",
             targetBundleIdentifier: "com.apple.TextEdit",
             pasteDuration: 0
@@ -69,9 +71,10 @@ struct CueAppModelDictationTests {
 
         #expect(model.sessionState == .idle)
         #expect(model.transcript == transcriptionService.result.text)
-        #expect(model.lastInsertionResult?.delivery == .copiedToClipboard(.postEventSubmissionFailed("paste failed")))
+        #expect(model.lastInsertionResult?.delivery == .copiedToClipboard(.accessibilityPermissionMissing))
         #expect(model.errorMessage == nil)
-        #expect(model.lastInsertionResult?.delivery.detail == CueClipboardFallbackReason.postEventSubmissionFailed("paste failed").description)
+        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts.")
+        #expect(model.lastInsertionResult?.delivery.detail == CueClipboardFallbackReason.accessibilityPermissionMissing.description)
         #expect(insertionService.insertCallCount == 1)
     }
 

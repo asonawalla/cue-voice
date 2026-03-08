@@ -9,7 +9,6 @@ struct CuePermissionsPromptView: View {
             header
             statusSection
             microphoneSection
-            inputMonitoringSection
             accessibilitySection
 
             if !model.needsPermissionPrompt {
@@ -39,7 +38,7 @@ struct CuePermissionsPromptView: View {
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(CueTheme.ink)
 
-            Text("Cue needs microphone, Input Monitoring, and Accessibility before push-to-talk can run fully.")
+            Text("Cue needs microphone access to record. Accessibility is optional for automatic paste and takes effect after Cue restarts.")
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(CueTheme.slate)
         }
@@ -51,12 +50,6 @@ struct CuePermissionsPromptView: View {
                 title: CuePermissionKind.microphone.title,
                 value: model.permissionSnapshot.microphone.title,
                 isPositive: model.permissionSnapshot.microphone.isGranted
-            )
-
-            statusRow(
-                title: CuePermissionKind.inputMonitoring.title,
-                value: model.permissionSnapshot.inputMonitoring.title,
-                isPositive: model.permissionSnapshot.inputMonitoring.isGranted
             )
 
             statusRow(
@@ -93,34 +86,11 @@ struct CuePermissionsPromptView: View {
         .background(sectionBackground)
     }
 
-    private var inputMonitoringSection: some View {
-        let section = presentation.setup.inputMonitoring
-
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Input Monitoring")
-                .font(.system(.headline, design: .rounded))
-                .foregroundStyle(CueTheme.ink)
-
-            Text(section.detail)
-                .font(.system(.body, design: .rounded))
-                .foregroundStyle(CueTheme.slate)
-
-            if let primaryAction = section.primaryAction {
-                footerButton(title: primaryAction.title) {
-                    model.perform(primaryAction)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(sectionBackground)
-    }
-
     private var accessibilitySection: some View {
         let section = presentation.setup.accessibility
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text("Accessibility")
+            Text("Automatic Paste")
                 .font(.system(.headline, design: .rounded))
                 .foregroundStyle(CueTheme.ink)
 
@@ -129,8 +99,26 @@ struct CuePermissionsPromptView: View {
                 .foregroundStyle(CueTheme.slate)
 
             if let primaryAction = section.primaryAction {
-                footerButton(title: primaryAction.title) {
-                    model.perform(primaryAction)
+                HStack(spacing: 10) {
+                    footerButton(title: primaryAction.title) {
+                        model.perform(primaryAction)
+                    }
+
+                    if let secondaryAction = section.secondaryAction {
+                        Button(secondaryAction.title) {
+                            model.perform(secondaryAction)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+
+                if section.showsClipboardModeDismissal {
+                    Button("Continue in Clipboard Mode") {
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(CueTheme.accent)
                 }
             }
         }

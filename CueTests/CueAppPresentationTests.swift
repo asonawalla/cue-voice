@@ -3,23 +3,24 @@ import Testing
 
 @MainActor
 struct CueAppPresentationTests {
-    @Test func setupRequiredPresentationExposesSharedSetupAndMenuMetadata() {
+    @Test func clipboardModePresentationExposesSharedSetupAndMenuMetadata() {
         var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .unavailable)
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
         )
         state.setup.modelStatus = .ready
 
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.needsPermissionPrompt)
-        #expect(presentation.menu.title == "Accessibility Required")
-        #expect(presentation.menu.actions == [.openAccessibilitySettings, .openMainWindow, .quit])
+        #expect(presentation.menu.title == "Clipboard Mode")
+        #expect(presentation.menu.actions == [.openAccessibilitySettings, .restartApplication, .openMainWindow, .quit])
         #expect(presentation.setup.accessibility.primaryAction == .openAccessibilitySettings)
+        #expect(presentation.setup.accessibility.secondaryAction == .restartApplication)
     }
 
     @Test func failedModelPreparationPresentationOffersRetryAction() {
         var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .granted)
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
         state.setup.modelStatus = .failed("Model load failed")
 
@@ -31,7 +32,7 @@ struct CueAppPresentationTests {
 
     @Test func nonModelFailurePresentationKeepsOpenCueAvailable() {
         var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .granted)
+            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
         state.setup.modelStatus = .ready
         state.session = .failed(CueFailure.from(CueError.emptyTranscript))

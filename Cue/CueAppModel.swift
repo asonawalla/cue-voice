@@ -95,6 +95,18 @@ final class CueAppModel: CueStateStore {
         presentation.shouldOfferModelRetry
     }
 
+    var automaticPasteWarningMessage: String? {
+        presentation.setup.automaticPasteWarningMessage
+    }
+
+    var accessibilityRestartMessage: String? {
+        presentation.setup.accessibilityRestartMessage
+    }
+
+    var showsAutomaticPasteIndicator: Bool {
+        presentation.showsAutomaticPasteIndicator
+    }
+
     var menuBarSymbolName: String {
         presentation.menuBarSymbolName
     }
@@ -127,12 +139,12 @@ final class CueAppModel: CueStateStore {
         workflowCoordinator.openMicrophoneSettings()
     }
 
-    func openInputMonitoringSettings() {
-        workflowCoordinator.openInputMonitoringSettings()
-    }
-
     func openAccessibilitySettings() {
         workflowCoordinator.openAccessibilitySettings()
+    }
+
+    func restartApplication() {
+        workflowCoordinator.restartApplication()
     }
 
     func retryModelPreparation() async {
@@ -155,10 +167,10 @@ final class CueAppModel: CueStateStore {
             }
         case .openMicrophoneSettings:
             openMicrophoneSettings()
-        case .openInputMonitoringSettings:
-            openInputMonitoringSettings()
         case .openAccessibilitySettings:
             openAccessibilitySettings()
+        case .restartApplication:
+            restartApplication()
         case .retryModelPreparation:
             Task {
                 await retryModelPreparation()

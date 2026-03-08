@@ -8,9 +8,9 @@ import os
 protocol PermissionService: AnyObject {
     func currentPermissionSnapshot() -> CuePermissionSnapshot
     func requestMicrophonePermission() async -> CuePermissionState
-    func requestInputMonitoringPermission()
     func requestAccessibilityPermission()
     func openSystemSettings(for permission: CuePermissionKind)
+    func restartApplication()
 }
 
 @MainActor
@@ -27,7 +27,6 @@ final class SystemPermissionService: PermissionService {
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
         CuePermissionSnapshot(
             microphone: microphonePermissionState,
-            inputMonitoring: inputMonitoringPermissionState,
             accessibility: accessibilityPermissionState
         )
     }
@@ -46,12 +45,7 @@ final class SystemPermissionService: PermissionService {
 
     func requestAccessibilityPermission() {
         let granted = CGRequestPostEventAccess()
-        logger.info("Requested Accessibility/Post Event access; current grant state is \(granted, privacy: .public)")
-    }
-
-    func requestInputMonitoringPermission() {
-        let granted = CGRequestListenEventAccess()
-        logger.info("Requested Input Monitoring access; current grant state is \(granted, privacy: .public)")
+        logger.info("Requested automatic paste access; current grant state is \(granted, privacy: .public)")
     }
 
     func openSystemSettings(for permission: CuePermissionKind) {
@@ -71,6 +65,22 @@ final class SystemPermissionService: PermissionService {
         logger.error("Failed to open System Settings for \(permission.title, privacy: .public)")
     }
 
+    func restartApplication() {
+        let bundlePath = Bundle.main.bundlePath
+        let relaunchTask = Process()
+
+        relaunchTask.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunchTask.arguments = ["-c", "sleep 0.3; open \"\(bundlePath)\""]
+
+        do {
+            try relaunchTask.run()
+            logger.info("Scheduled Cue relaunch")
+            NSApplication.shared.terminate(nil)
+        } catch {
+            logger.error("Failed to schedule Cue relaunch: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private var microphonePermissionState: CuePermissionState {
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
@@ -84,11 +94,7 @@ final class SystemPermissionService: PermissionService {
         }
     }
 
-    private var inputMonitoringPermissionState: CueSystemPermissionState {
-        CGPreflightListenEventAccess() ? .granted : .unavailable
-    }
-
-    private var accessibilityPermissionState: CueSystemPermissionState {
+    private var accessibilityPermissionState: CueAccessibilityPermissionState {
         CGPreflightPostEventAccess() ? .granted : .unavailable
     }
 }
@@ -98,8 +104,6 @@ private extension CuePermissionKind {
         switch self {
         case .microphone:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        case .inputMonitoring:
-            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
         case .accessibility:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         }

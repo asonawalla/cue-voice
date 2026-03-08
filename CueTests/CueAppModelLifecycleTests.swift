@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct CueAppModelLifecycleTests {
-    @Test func launchWithGrantedPermissionsWarmsTheModelWithoutLeavingIdle() async throws {
+    @Test func launchWithGrantedMicrophoneWarmsTheModelWithoutLeavingIdle() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
@@ -30,7 +30,7 @@ struct CueAppModelLifecycleTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, inputMonitoring: .granted, accessibility: .granted)
+            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .unavailable)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -51,7 +51,7 @@ struct CueAppModelLifecycleTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, inputMonitoring: .granted, accessibility: .unavailable)
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .unavailable)
         )
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -62,10 +62,12 @@ struct CueAppModelLifecycleTests {
 
         await model.launch()
 
-        #expect(!model.isReadyToRecord)
+        #expect(model.isReadyToRecord)
         #expect(model.isModelReady)
         #expect(model.needsPermissionPrompt)
-        #expect(model.menuBarPrimaryStatus == "Accessibility Required")
-        #expect(model.menuBarSecondaryStatus == "Cue needs Accessibility before it can paste transcripts into the focused app.")
+        #expect(model.menuBarPrimaryStatus == "Clipboard Mode")
+        #expect(model.automaticPasteWarningMessage == "Automatic paste is off. Cue will copy transcripts to the clipboard until Accessibility is enabled and Cue restarts.")
+        #expect(model.accessibilityRestartMessage == "After you enable Cue in Accessibility settings, restart the app to turn automatic paste on.")
+        #expect(model.showsAutomaticPasteIndicator)
     }
 }
