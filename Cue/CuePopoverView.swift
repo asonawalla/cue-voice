@@ -9,23 +9,31 @@ struct CuePopoverView: View {
         VStack(alignment: .leading, spacing: 16) {
             headerSection
 
-            if model.needsPermissionPrompt {
-                setupSection
-            } else if model.shouldOfferModelRetry {
-                modelRetrySection
-            } else {
-                readySection
+            Group {
+                if model.needsPermissionPrompt {
+                    setupSection
+                } else if model.shouldOfferModelRetry {
+                    modelRetrySection
+                } else {
+                    readySection
+                }
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             if let errorMessage = model.errorMessage {
                 errorSection(message: errorMessage)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             Divider()
             quitButton
         }
-        .padding(20)
+        .padding(CueTheme.popoverPadding)
         .frame(width: 320)
+        .popoverBackground()
+        .animation(.easeInOut(duration: 0.2), value: model.needsPermissionPrompt)
+        .animation(.easeInOut(duration: 0.2), value: model.shouldOfferModelRetry)
+        .animation(.easeInOut(duration: 0.25), value: model.errorMessage != nil)
     }
 
     private var headerSection: some View {
@@ -88,6 +96,7 @@ struct CuePopoverView: View {
             HStack {
                 Image(systemName: isGranted ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isGranted ? CueTheme.success : CueTheme.slate)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isGranted)
 
                 Text(title)
                     .font(.system(.subheadline, design: .rounded).weight(.medium))
@@ -117,11 +126,8 @@ struct CuePopoverView: View {
                 }
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.8))
-        )
+        .padding(CueTheme.cardPadding)
+        .glassCard()
     }
 
     private var readySection: some View {
@@ -142,12 +148,9 @@ struct CuePopoverView: View {
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(CueTheme.slate)
         }
-        .padding(12)
+        .padding(CueTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.8))
-        )
+        .glassCard()
     }
 
     private var modelRetrySection: some View {
@@ -166,12 +169,9 @@ struct CuePopoverView: View {
             .buttonStyle(.borderedProminent)
             .tint(CueTheme.accent)
         }
-        .padding(12)
+        .padding(CueTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(red: 0.98, green: 0.91, blue: 0.90))
-        )
+        .glassCardTinted(tintColor: CueTheme.errorInk.opacity(0.3))
     }
 
     private func errorSection(message: String) -> some View {
@@ -187,10 +187,7 @@ struct CuePopoverView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(red: 0.98, green: 0.91, blue: 0.90).opacity(0.6))
-        )
+        .glassCardTinted(tintColor: CueTheme.errorInk.opacity(0.2), cornerRadius: CueTheme.errorCornerRadius)
     }
 
     private var quitButton: some View {
@@ -202,3 +199,60 @@ struct CuePopoverView: View {
         .foregroundStyle(CueTheme.muted)
     }
 }
+
+#if DEBUG
+struct CueGlassPreviewHelper: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Glass Card Styles")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Regular Glass Card")
+                    .font(.subheadline)
+                Text("This card uses Liquid Glass on macOS 26+ or ultraThinMaterial fallback")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassCard()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tinted Glass Card (Error)")
+                    .font(.subheadline)
+                Text("This card shows error styling with red tint")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassCardTinted(tintColor: .red.opacity(0.3))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tinted Glass Card (Success)")
+                    .font(.subheadline)
+                Text("This card shows success styling with green tint")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassCardTinted(tintColor: .green.opacity(0.3))
+        }
+        .padding(20)
+        .frame(width: 320)
+        .popoverBackground()
+    }
+}
+
+#Preview("Glass Styles") {
+    CueGlassPreviewHelper()
+        .preferredColorScheme(.light)
+}
+
+#Preview("Glass Styles - Dark") {
+    CueGlassPreviewHelper()
+        .preferredColorScheme(.dark)
+}
+#endif
