@@ -91,4 +91,48 @@ struct CueAppModelDictationTests {
         #expect(model.errorMessage == "Cue could not transcribe the recording: backend offline")
         #expect(insertionService.insertCallCount == 0)
     }
+
+    @Test func startCuePlaysImmediatelyWhenAnAcceptedStartAttemptLaterFails() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService()
+        let soundService = FakeSoundService()
+        transcriptionService.startRecordingError = CueError.recordingFailed("audio device busy")
+
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            soundService: soundService,
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        await model.handlePushToTalkPressed()
+
+        #expect(soundService.playRecordingStartedCallCount == 1)
+        #expect(model.errorMessage == "Cue could not start recording: audio device busy")
+        #expect(model.sessionState == .failed(CueFailure.from(CueError.recordingFailed("audio device busy"))))
+    }
+}
+
+@MainActor
+struct SystemSoundServiceTests {
+    @Test func cuePlaybackRestartsTheDedicatedSoundInstanceEachTime() async throws {
+        let recordingStartedSound = FakePlayableSound()
+        let recordingStoppedSound = FakePlayableSound()
+        let service = SystemSoundService(
+            recordingStartedSound: recordingStartedSound,
+            recordingStoppedSound: recordingStoppedSound
+        )
+
+        service.playRecordingStarted()
+        service.playRecordingStarted()
+        service.playRecordingStopped()
+
+        #expect(recordingStartedSound.stopCallCount == 2)
+        #expect(recordingStartedSound.playCallCount == 2)
+        #expect(recordingStoppedSound.stopCallCount == 1)
+        #expect(recordingStoppedSound.playCallCount == 1)
+    }
 }

@@ -17,7 +17,8 @@ struct CueAppEnvironment {
             let model = CueAppModel(
                 transcriptionService: UITestTranscriptionService(),
                 insertionService: UITestTextInsertionService(),
-                permissionService: UITestPermissionService()
+                permissionService: UITestPermissionService(),
+                soundService: UITestSoundService()
             )
             let hotkeyManager = CueHotkeyManager(
                 appModel: model,
@@ -90,13 +91,53 @@ private final class UITestTextInsertionService: TextInsertionService {
     }
 }
 
-struct SystemSoundService: SoundService {
+@MainActor
+protocol PlayableSound: AnyObject {
+    @discardableResult
+    func play() -> Bool
+
+    @discardableResult
+    func stop() -> Bool
+}
+
+extension NSSound: PlayableSound {}
+
+@MainActor
+final class SystemSoundService: SoundService {
+    private let recordingStartedSound: any PlayableSound
+    private let recordingStoppedSound: any PlayableSound
+
+    init(
+        recordingStartedSound: (any PlayableSound)? = nil,
+        recordingStoppedSound: (any PlayableSound)? = nil
+    ) {
+        self.recordingStartedSound = recordingStartedSound
+            ?? Self.makeSound(named: NSSound.Name("Funk"))
+            ?? SilentPlayableSound()
+        self.recordingStoppedSound = recordingStoppedSound
+            ?? Self.makeSound(named: NSSound.Name("Bottle"))
+            ?? SilentPlayableSound()
+    }
+
     func playRecordingStarted() {
-        NSSound(named: NSSound.Name("Funk"))?.play()
+        restart(recordingStartedSound)
     }
 
     func playRecordingStopped() {
-        NSSound(named: NSSound.Name("Bottle"))?.play()
+        restart(recordingStoppedSound)
+    }
+
+    private func restart(_ sound: any PlayableSound) {
+        sound.stop()
+        _ = sound.play()
+    }
+
+    private static func makeSound(named name: NSSound.Name) -> NSSound? {
+        guard let template = NSSound(named: name) else {
+            return nil
+        }
+
+        return template.copy() as? NSSound
     }
 }
 
@@ -104,4 +145,17 @@ struct SystemSoundService: SoundService {
 private final class UITestSoundService: SoundService {
     func playRecordingStarted() {}
     func playRecordingStopped() {}
+}
+
+@MainActor
+private final class SilentPlayableSound: PlayableSound {
+    @discardableResult
+    func play() -> Bool {
+        false
+    }
+
+    @discardableResult
+    func stop() -> Bool {
+        false
+    }
 }

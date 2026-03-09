@@ -105,6 +105,7 @@ final class CueDictationCoordinator {
         }
 
         clearFailureForNewAttempt()
+        soundService.playRecordingStarted()
 
         do {
             try await transcriptionService.startRecording()
@@ -112,8 +113,6 @@ final class CueDictationCoordinator {
             stateStore.updateState { updatedState in
                 updatedState.session = .recording
             }
-
-            soundService.playRecordingStarted()
         } catch {
             present(error)
         }

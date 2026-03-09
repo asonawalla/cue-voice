@@ -230,6 +230,7 @@ struct LatencyMetrics: Equatable {
     let backendPipelineDuration: TimeInterval
 }
 
+@MainActor
 protocol SoundService {
     func playRecordingStarted()
     func playRecordingStopped()

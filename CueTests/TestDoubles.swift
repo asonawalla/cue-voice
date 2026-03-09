@@ -9,6 +9,7 @@ final class FakeTranscriptionService: TranscriptionService {
     var startRecordingCallCount = 0
     var stopRecordingCallCount = 0
     var prepareError: Error?
+    var startRecordingError: Error?
     var stopRecordingError: Error?
     var result = CueTranscriptionResult(
         text: "milestone transcript",
@@ -30,6 +31,10 @@ final class FakeTranscriptionService: TranscriptionService {
 
     func startRecording() async throws {
         startRecordingCallCount += 1
+
+        if let startRecordingError {
+            throw startRecordingError
+        }
     }
 
     func stopRecording() async throws -> CueTranscriptionResult {
@@ -118,5 +123,23 @@ final class FakeSoundService: SoundService {
 
     func playRecordingStopped() {
         playRecordingStoppedCallCount += 1
+    }
+}
+
+@MainActor
+final class FakePlayableSound: PlayableSound {
+    var playCallCount = 0
+    var stopCallCount = 0
+
+    @discardableResult
+    func play() -> Bool {
+        playCallCount += 1
+        return true
+    }
+
+    @discardableResult
+    func stop() -> Bool {
+        stopCallCount += 1
+        return true
     }
 }
