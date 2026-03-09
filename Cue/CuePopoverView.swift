@@ -4,31 +4,38 @@ import SwiftUI
 struct CuePopoverView: View {
     @Bindable var model: CueAppModel
     @Bindable var hotkeyManager: CueHotkeyManager
+    @State private var isQuitHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            headerSection
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 16) {
+                headerSection
 
-            Group {
-                if model.needsPermissionPrompt {
-                    setupSection
-                } else if model.shouldOfferModelRetry {
-                    modelRetrySection
-                } else {
-                    readySection
+                Group {
+                    if model.needsPermissionPrompt {
+                        setupSection
+                    } else if model.shouldOfferModelRetry {
+                        modelRetrySection
+                    } else {
+                        readySection
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+
+                if let errorMessage = model.errorMessage {
+                    errorSection(message: errorMessage)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-
-            if let errorMessage = model.errorMessage {
-                errorSection(message: errorMessage)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            .padding(CueTheme.popoverPadding)
 
             Divider()
+                .padding(.horizontal, CueTheme.popoverPadding)
+
             quitButton
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
         }
-        .padding(CueTheme.popoverPadding)
         .frame(width: 320)
         .popoverBackground()
         .animation(.easeInOut(duration: 0.2), value: model.needsPermissionPrompt)
@@ -191,12 +198,63 @@ struct CuePopoverView: View {
     }
 
     private var quitButton: some View {
-        Button("Quit Cue") {
+        Button {
             model.perform(.quit)
+        } label: {
+            HStack {
+                Text("Quit Cue")
+                Spacer()
+            }
         }
-        .buttonStyle(.plain)
-        .font(.system(.caption, design: .rounded))
-        .foregroundStyle(CueTheme.muted)
+        .buttonStyle(CueFooterActionButtonStyle(isHovered: isQuitHovered))
+        .onHover { isHovering in
+            isQuitHovered = isHovering
+        }
+    }
+}
+
+private struct CueFooterActionButtonStyle: ButtonStyle {
+    let isHovered: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.caption, design: .rounded))
+            .foregroundStyle(isHovered || configuration.isPressed ? CueTheme.ink : CueTheme.muted)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous)
+                    .fill(backgroundFill(isPressed: configuration.isPressed))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous)
+                            .strokeBorder(borderColor(isPressed: configuration.isPressed), lineWidth: 1)
+                    }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous))
+            .animation(.easeInOut(duration: 0.12), value: isHovered)
+            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
+    }
+
+    private func backgroundFill(isPressed: Bool) -> Color {
+        let base = Color(nsColor: .selectedContentBackgroundColor)
+        if isPressed {
+            return base.opacity(0.30)
+        }
+        if isHovered {
+            return base.opacity(0.22)
+        }
+        return base.opacity(0.10)
+    }
+
+    private func borderColor(isPressed: Bool) -> Color {
+        if isPressed {
+            return Color(nsColor: .separatorColor).opacity(0.40)
+        }
+        if isHovered {
+            return Color(nsColor: .separatorColor).opacity(0.28)
+        }
+        return Color(nsColor: .separatorColor).opacity(0.18)
     }
 }
 

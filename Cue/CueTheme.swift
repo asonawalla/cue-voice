@@ -25,6 +25,7 @@ enum CueTheme {
 
     static let cardCornerRadius: CGFloat = 12
     static let errorCornerRadius: CGFloat = 8
+    static let footerActionCornerRadius: CGFloat = 10
     static let popoverPadding: CGFloat = 20
     static let cardPadding: CGFloat = 12
 }
