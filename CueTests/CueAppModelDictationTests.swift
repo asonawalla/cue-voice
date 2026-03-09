@@ -8,6 +8,7 @@ struct CueAppModelDictationTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
+        let soundService = FakeSoundService()
         transcriptionService.result = CueTranscriptionResult(
             text: "milestone three transcript",
             language: "en",
@@ -26,6 +27,7 @@ struct CueAppModelDictationTests {
             transcriptionService: transcriptionService,
             insertionService: insertionService,
             permissionService: permissionService,
+            soundService: soundService,
             notificationCenter: NotificationCenter()
         )
 
@@ -43,18 +45,22 @@ struct CueAppModelDictationTests {
         #expect(transcriptionService.startRecordingCallCount == 1)
         #expect(transcriptionService.stopRecordingCallCount == 1)
         #expect(insertionService.insertCallCount == 1)
+        #expect(soundService.playRecordingStartedCallCount == 1)
+        #expect(soundService.playRecordingStoppedCallCount == 1)
     }
 
     @Test func launchFailureMovesStateToErrorWhenPermissionsAreSatisfied() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
+        let soundService = FakeSoundService()
         transcriptionService.prepareError = CueError.modelDownloadFailed("offline")
 
         let model = CueAppModel(
             transcriptionService: transcriptionService,
             insertionService: insertionService,
             permissionService: permissionService,
+            soundService: soundService,
             notificationCenter: NotificationCenter()
         )
 
@@ -68,11 +74,13 @@ struct CueAppModelDictationTests {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
+        let soundService = FakeSoundService()
         transcriptionService.stopRecordingError = CueError.transcriptionFailed("backend offline")
         let model = CueAppModel(
             transcriptionService: transcriptionService,
             insertionService: insertionService,
             permissionService: permissionService,
+            soundService: soundService,
             notificationCenter: NotificationCenter()
         )
 

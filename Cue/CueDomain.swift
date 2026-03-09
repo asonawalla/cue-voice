@@ -230,6 +230,11 @@ struct LatencyMetrics: Equatable {
     let backendPipelineDuration: TimeInterval
 }
 
+protocol SoundService {
+    func playRecordingStarted()
+    func playRecordingStopped()
+}
+
 enum CueError: LocalizedError, Equatable {
     case busy
     case microphonePermissionDenied

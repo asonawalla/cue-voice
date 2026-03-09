@@ -16,16 +16,19 @@ final class CueAppModel: CueStateStore {
         transcriptionService: TranscriptionService? = nil,
         insertionService: TextInsertionService? = nil,
         permissionService: PermissionService? = nil,
+        soundService: (any SoundService)? = nil,
         notificationCenter: NotificationCenter = .default
     ) {
         let transcriptionService = transcriptionService ?? WhisperKitTranscriptionService()
         let insertionService = insertionService ?? PasteboardInsertionService()
         let permissionService = permissionService ?? SystemPermissionService()
+        let soundService = soundService ?? SystemSoundService()
 
         self.workflowCoordinator = CueWorkflowCoordinator(
             transcriptionService: transcriptionService,
             insertionService: insertionService,
-            permissionService: permissionService
+            permissionService: permissionService,
+            soundService: soundService
         )
         self.state = workflowCoordinator.initialState
         self.notificationCenter = notificationCenter

@@ -89,3 +89,19 @@ private final class UITestTextInsertionService: TextInsertionService {
         )
     }
 }
+
+struct SystemSoundService: SoundService {
+    func playRecordingStarted() {
+        NSSound(named: NSSound.Name("Funk"))?.play()
+    }
+
+    func playRecordingStopped() {
+        NSSound(named: NSSound.Name("Bottle"))?.play()
+    }
+}
+
+@MainActor
+private final class UITestSoundService: SoundService {
+    func playRecordingStarted() {}
+    func playRecordingStopped() {}
+}

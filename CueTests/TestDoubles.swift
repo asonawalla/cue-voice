@@ -106,3 +106,17 @@ final class FakePermissionService: PermissionService {
         restartApplicationCallCount += 1
     }
 }
+
+@MainActor
+final class FakeSoundService: SoundService {
+    var playRecordingStartedCallCount = 0
+    var playRecordingStoppedCallCount = 0
+
+    func playRecordingStarted() {
+        playRecordingStartedCallCount += 1
+    }
+
+    func playRecordingStopped() {
+        playRecordingStoppedCallCount += 1
+    }
+}

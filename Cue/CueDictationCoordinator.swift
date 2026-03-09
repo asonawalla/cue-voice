@@ -7,14 +7,17 @@ final class CueDictationCoordinator {
 
     private let transcriptionService: TranscriptionService
     private let insertionService: TextInsertionService
+    private let soundService: any SoundService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Dictation")
 
     init(
         transcriptionService: TranscriptionService,
-        insertionService: TextInsertionService
+        insertionService: TextInsertionService,
+        soundService: any SoundService
     ) {
         self.transcriptionService = transcriptionService
         self.insertionService = insertionService
+        self.soundService = soundService
     }
 
     func bind(to stateStore: any CueStateStore) {
@@ -109,6 +112,8 @@ final class CueDictationCoordinator {
             stateStore.updateState { updatedState in
                 updatedState.session = .recording
             }
+
+            soundService.playRecordingStarted()
         } catch {
             present(error)
         }
@@ -122,6 +127,8 @@ final class CueDictationCoordinator {
         guard stateStore.state.session == .recording else {
             return
         }
+
+        soundService.playRecordingStopped()
 
         stateStore.updateState { state in
             state.session = .transcribing

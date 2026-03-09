@@ -23,7 +23,8 @@ final class CueWorkflowCoordinator {
     init(
         transcriptionService: TranscriptionService,
         insertionService: TextInsertionService,
-        permissionService: PermissionService
+        permissionService: PermissionService,
+        soundService: any SoundService
     ) {
         setupCoordinator = CueSetupCoordinator(
             transcriptionService: transcriptionService,
@@ -31,7 +32,8 @@ final class CueWorkflowCoordinator {
         )
         dictationCoordinator = CueDictationCoordinator(
             transcriptionService: transcriptionService,
-            insertionService: insertionService
+            insertionService: insertionService,
+            soundService: soundService
         )
     }
 
