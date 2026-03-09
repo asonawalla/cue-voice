@@ -15,6 +15,10 @@ protocol TranscriptionService: AnyObject {
 final class WhisperKitTranscriptionService: TranscriptionService {
     var statusHandler: ((ModelPreparationStatus) -> Void)?
 
+    private static let ignoredTranscriptSentinels: Set<String> = [
+        "[BLANK_AUDIO]"
+    ]
+
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let clientFactory: WhisperKitClientFactory
@@ -134,7 +138,8 @@ final class WhisperKitTranscriptionService: TranscriptionService {
                 .joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard !transcript.isEmpty else {
+            guard !transcript.isEmpty,
+                  !Self.ignoredTranscriptSentinels.contains(transcript) else {
                 throw CueError.emptyTranscript
             }
 

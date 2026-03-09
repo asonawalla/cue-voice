@@ -72,6 +72,22 @@ struct WhisperKitTranscriptionServiceTests {
             try await service.stopRecording()
         }
     }
+
+    @Test func stopRecordingRejectsBlankAudioSentinelTranscript() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.transcriptions = [
+            WhisperKitTranscriptionSegment(text: "[BLANK_AUDIO]", language: "en", modelLoadDuration: 0.1, pipelineDuration: 0.2)
+        ]
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+
+        await #expect(throws: CueError.emptyTranscript) {
+            try await service.stopRecording()
+        }
+    }
 }
 
 private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
