@@ -5,7 +5,7 @@ final class CueUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testLaunchShowsMenuBarPopoverInUITestMode() throws {
+    func testLaunchOpensCueWindowFromMenuBarMenu() throws {
         let app = XCUIApplication()
         let systemUI = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
 
@@ -19,28 +19,57 @@ final class CueUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(menuBarItem.waitForExistence(timeout: 15))
 
-        let popover = app.descendants(matching: .any)[CueAccessibilityID.popoverRoot]
-        openMenuBarPopover(using: menuBarItem, popover: popover)
+        let mainWindow = app.descendants(matching: .any)[CueAccessibilityID.mainWindowRoot]
+        XCTAssertFalse(mainWindow.exists)
 
+        openCueWindow(using: menuBarItem, app: app, systemUI: systemUI)
+
+        XCTAssertTrue(mainWindow.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Push to Talk"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.shortcutRecorder].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.pushToTalkSection].exists)
-        XCTAssertTrue(app.buttons["Quit Cue"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.quitButton].exists)
+
+        openCueWindow(using: menuBarItem, app: app, systemUI: systemUI)
+
+        XCTAssertEqual(
+            app.descendants(matching: .any)
+                .matching(identifier: CueAccessibilityID.mainWindowRoot)
+                .count,
+            1
+        )
     }
 
-    private func openMenuBarPopover(using menuBarItem: XCUIElement, popover: XCUIElement) {
-        if popover.exists {
-            return
-        }
-
+    private func openCueWindow(using menuBarItem: XCUIElement, app: XCUIApplication, systemUI: XCUIApplication) {
         for _ in 0..<3 {
             menuBarItem.click()
-            if popover.waitForExistence(timeout: 3) {
+
+            if let openCueMenuItem = findOpenCueMenuItem(app: app, systemUI: systemUI, timeout: 3) {
+                openCueMenuItem.click()
                 return
             }
         }
 
-        XCTAssertTrue(popover.waitForExistence(timeout: 3))
+        XCTFail("Failed to find the Open Cue menu item")
+    }
+
+    private func findOpenCueMenuItem(app: XCUIApplication, systemUI: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+        let candidates = [
+            app.descendants(matching: .menuItem)[CueAccessibilityID.openCueMenuItem],
+            systemUI.descendants(matching: .menuItem)[CueAccessibilityID.openCueMenuItem],
+            app.menuItems["Open Cue"],
+            systemUI.menuItems["Open Cue"],
+        ]
+
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            for candidate in candidates where candidate.exists {
+                return candidate
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        while Date() < deadline
+
+        return nil
     }
 }

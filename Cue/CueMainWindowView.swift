@@ -1,13 +1,12 @@
 import KeyboardShortcuts
 import SwiftUI
 
-struct CuePopoverView: View {
+struct CueMainWindowView: View {
     @Bindable var model: CueAppModel
     @Bindable var hotkeyManager: CueHotkeyManager
-    @State private var isQuitHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerSection
 
@@ -27,44 +26,40 @@ struct CuePopoverView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(CueTheme.popoverPadding)
-
-            Divider()
-                .padding(.horizontal, CueTheme.popoverPadding)
-
-            quitButton
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 320)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .popoverBackground()
-        .accessibilityIdentifier(CueAccessibilityID.popoverRoot)
+        .accessibilityIdentifier(CueAccessibilityID.mainWindowRoot)
         .animation(.easeInOut(duration: 0.2), value: model.needsPermissionPrompt)
         .animation(.easeInOut(duration: 0.2), value: model.shouldOfferModelRetry)
         .animation(.easeInOut(duration: 0.25), value: model.errorMessage != nil)
     }
 
     private var headerSection: some View {
-        HStack {
+        HStack(spacing: 14) {
             Image(systemName: model.menuBarSymbolName)
-                .font(.system(size: 24))
+                .font(.system(size: 28))
                 .foregroundStyle(CueTheme.accent)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(model.menuBarPrimaryStatus)
-                    .font(.system(.headline, design: .rounded))
+                    .font(.system(.title3, design: .rounded).weight(.semibold))
                     .foregroundStyle(CueTheme.ink)
 
                 if let secondary = model.menuBarSecondaryStatus {
                     Text(secondary)
-                        .font(.system(.caption, design: .rounded))
+                        .font(.system(.callout, design: .rounded))
                         .foregroundStyle(CueTheme.slate)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             Spacer()
         }
+        .padding(CueTheme.cardPadding)
+        .glassCard()
     }
 
     private var setupSection: some View {
@@ -135,6 +130,7 @@ struct CuePopoverView: View {
             }
         }
         .padding(CueTheme.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
     }
 
@@ -202,67 +198,6 @@ struct CuePopoverView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCardTinted(tintColor: CueTheme.errorInk.opacity(0.2), cornerRadius: CueTheme.errorCornerRadius)
-    }
-
-    private var quitButton: some View {
-        Button {
-            model.perform(.quit)
-        } label: {
-            HStack {
-                Text("Quit Cue")
-                Spacer()
-            }
-        }
-        .accessibilityIdentifier(CueAccessibilityID.quitButton)
-        .buttonStyle(CueFooterActionButtonStyle(isHovered: isQuitHovered))
-        .onHover { isHovering in
-            isQuitHovered = isHovering
-        }
-    }
-}
-
-private struct CueFooterActionButtonStyle: ButtonStyle {
-    let isHovered: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.caption, design: .rounded))
-            .foregroundStyle(isHovered || configuration.isPressed ? CueTheme.ink : CueTheme.muted)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous)
-                    .fill(backgroundFill(isPressed: configuration.isPressed))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous)
-                            .strokeBorder(borderColor(isPressed: configuration.isPressed), lineWidth: 1)
-                    }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: CueTheme.footerActionCornerRadius, style: .continuous))
-            .animation(.easeInOut(duration: 0.12), value: isHovered)
-            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
-    }
-
-    private func backgroundFill(isPressed: Bool) -> Color {
-        let base = Color(nsColor: .selectedContentBackgroundColor)
-        if isPressed {
-            return base.opacity(0.30)
-        }
-        if isHovered {
-            return base.opacity(0.22)
-        }
-        return base.opacity(0.10)
-    }
-
-    private func borderColor(isPressed: Bool) -> Color {
-        if isPressed {
-            return Color(nsColor: .separatorColor).opacity(0.40)
-        }
-        if isHovered {
-            return Color(nsColor: .separatorColor).opacity(0.28)
-        }
-        return Color(nsColor: .separatorColor).opacity(0.18)
     }
 }
 

@@ -15,21 +15,50 @@ struct CueApp: App {
         _hotkeyManager = State(initialValue: hotkeyManager)
 
         Task { @MainActor in
-            if CueAppEnvironment.isUITesting || model.needsPermissionPrompt {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-            }
-
             await model.launch()
         }
     }
 
     var body: some Scene {
         MenuBarExtra {
-            CuePopoverView(model: model, hotkeyManager: hotkeyManager)
+            CueMenuBarMenuView(model: model)
         } label: {
             CueMenuBarLabelView(model: model)
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
+
+        Window("Cue", id: CueSceneID.mainWindow) {
+            CueMainWindowView(model: model, hotkeyManager: hotkeyManager)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .defaultSize(width: 420, height: 520)
+    }
+}
+
+private struct CueMenuBarMenuView: View {
+    @Bindable var model: CueAppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Text(model.menuBarPrimaryStatus)
+
+        if let secondaryStatus = model.menuBarSecondaryStatus {
+            Text(secondaryStatus)
+        }
+
+        Divider()
+
+        Button("Open Cue") {
+            openWindow(id: CueSceneID.mainWindow)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        .accessibilityIdentifier(CueAccessibilityID.openCueMenuItem)
+
+        Divider()
+
+        Button("Quit Cue") {
+            model.perform(.quit)
+        }
     }
 }
 
