@@ -102,6 +102,17 @@ struct CuePermissionSnapshot: Equatable {
 
         return "Cue can record, transcribe, and paste automatically."
     }
+
+    func resolves(_ error: CueError) -> Bool {
+        switch error {
+        case .microphonePermissionDenied:
+            return isMicrophoneReady
+        case .accessibilityPermissionDenied:
+            return isAccessibilityReady
+        default:
+            return false
+        }
+    }
 }
 
 enum ModelPreparationStatus: Equatable {
