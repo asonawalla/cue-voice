@@ -41,7 +41,7 @@ final class CueSetupCoordinator {
             state.setup.permissions = snapshot
             state.setup.hasLoadedPermissions = true
 
-            if snapshot.isMicrophoneReady, state.currentFailure?.isPermissionRelated == true {
+            if let cueError = state.currentFailure?.cueError, snapshot.resolves(cueError) {
                 state.session = .idle
             }
         }
