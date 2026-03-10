@@ -180,6 +180,10 @@ final class CueDictationCoordinator {
     private func present(_ error: Error) {
         let failure = CueFailure.from(error)
 
+        if failure.cueError?.shouldPlayErrorSound == true {
+            soundService.playError()
+        }
+
         stateStore?.updateState { state in
             state.session = .failed(failure)
         }

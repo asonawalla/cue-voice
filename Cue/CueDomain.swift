@@ -213,6 +213,7 @@ struct LatencyMetrics: Equatable {
 protocol SoundService {
     func playRecordingStarted()
     func playRecordingStopped()
+    func playError()
 }
 
 enum CueError: LocalizedError, Equatable {
@@ -246,6 +247,25 @@ enum CueError: LocalizedError, Equatable {
         case .modelDownloadFailed, .modelLoadFailed:
             return true
         default:
+            return false
+        }
+    }
+
+    var shouldPlayErrorSound: Bool {
+        switch self {
+        case .missingMicrophoneInput, .recordingFailed, .transcriptionFailed, .pasteFailed:
+            return true
+        case .busy,
+                .microphonePermissionDenied,
+                .accessibilityPermissionDenied,
+                .recordingAlreadyInProgress,
+                .noRecordingInProgress,
+                .recordingTooShort,
+                .modelDownloadFailed,
+                .modelLoadFailed,
+                .emptyTranscript,
+                .noFrontmostApplication,
+                .cannotPasteIntoCue:
             return false
         }
     }

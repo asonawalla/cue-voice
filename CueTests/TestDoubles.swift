@@ -116,6 +116,7 @@ final class FakePermissionService: PermissionService {
 final class FakeSoundService: SoundService {
     var playRecordingStartedCallCount = 0
     var playRecordingStoppedCallCount = 0
+    var playErrorCallCount = 0
 
     func playRecordingStarted() {
         playRecordingStartedCallCount += 1
@@ -123,6 +124,10 @@ final class FakeSoundService: SoundService {
 
     func playRecordingStopped() {
         playRecordingStoppedCallCount += 1
+    }
+
+    func playError() {
+        playErrorCallCount += 1
     }
 }
 

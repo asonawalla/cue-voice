@@ -106,16 +106,21 @@ extension NSSound: PlayableSound {}
 final class SystemSoundService: SoundService {
     private let recordingStartedSound: any PlayableSound
     private let recordingStoppedSound: any PlayableSound
+    private let errorSound: any PlayableSound
 
     init(
         recordingStartedSound: (any PlayableSound)? = nil,
-        recordingStoppedSound: (any PlayableSound)? = nil
+        recordingStoppedSound: (any PlayableSound)? = nil,
+        errorSound: (any PlayableSound)? = nil
     ) {
         self.recordingStartedSound = recordingStartedSound
             ?? Self.makeSound(named: NSSound.Name("Funk"))
             ?? SilentPlayableSound()
         self.recordingStoppedSound = recordingStoppedSound
             ?? Self.makeSound(named: NSSound.Name("Bottle"))
+            ?? SilentPlayableSound()
+        self.errorSound = errorSound
+            ?? Self.makeSound(named: NSSound.Name("Basso"))
             ?? SilentPlayableSound()
     }
 
@@ -125,6 +130,10 @@ final class SystemSoundService: SoundService {
 
     func playRecordingStopped() {
         restart(recordingStoppedSound)
+    }
+
+    func playError() {
+        restart(errorSound)
     }
 
     private func restart(_ sound: any PlayableSound) {
@@ -145,6 +154,7 @@ final class SystemSoundService: SoundService {
 private final class UITestSoundService: SoundService {
     func playRecordingStarted() {}
     func playRecordingStopped() {}
+    func playError() {}
 }
 
 @MainActor
