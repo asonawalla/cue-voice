@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Cue
@@ -67,5 +68,47 @@ struct CueAppModelLifecycleTests {
         #expect(model.sessionState == .idle)
         #expect(model.needsPermissionPrompt)
         #expect(model.menuBarPrimaryStatus == "Accessibility Required")
+    }
+
+    @Test func becomingActiveRefreshesPermissionsAndWarmsModel() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(
+            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
+        )
+        let notificationCenter = NotificationCenter()
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            notificationCenter: notificationCenter
+        )
+
+        await model.launch()
+
+        #expect(transcriptionService.prepareCallCount == 0)
+        #expect(!model.isReadyToRecord)
+
+        permissionService.snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+
+        await yieldUntil { transcriptionService.prepareCallCount == 1 }
+
+        #expect(model.isReadyToRecord)
+        #expect(model.isModelReady)
+        #expect(model.sessionState == .idle)
+    }
+
+    private func yieldUntil(
+        maxYields: Int = 20,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxYields {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
     }
 }

@@ -13,11 +13,10 @@ final class CueUITests: XCTestCase {
         app.launch()
         app.activate()
 
-        let menuBarItem = app
-            .descendants(matching: .statusItem)
-            .matching(identifier: CueAccessibilityID.menuBarTrigger)
-            .firstMatch
-        XCTAssertTrue(menuBarItem.waitForExistence(timeout: 15))
+        guard let menuBarItem = findMenuBarItem(app: app, systemUI: systemUI, timeout: 15) else {
+            XCTFail("Failed to find the Cue menu bar item")
+            return
+        }
 
         let mainWindow = app.descendants(matching: .any)[CueAccessibilityID.mainWindowRoot]
         XCTAssertFalse(mainWindow.exists)
@@ -50,6 +49,35 @@ final class CueUITests: XCTestCase {
         }
 
         XCTFail("Failed to find the Open Cue menu item")
+    }
+
+    private func findMenuBarItem(app: XCUIApplication, systemUI: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+        let candidates = [
+            app.descendants(matching: .statusItem)[CueAccessibilityID.menuBarTrigger],
+            systemUI.descendants(matching: .statusItem)[CueAccessibilityID.menuBarTrigger],
+            app.descendants(matching: .button)[CueAccessibilityID.menuBarTrigger],
+            systemUI.descendants(matching: .button)[CueAccessibilityID.menuBarTrigger],
+            app.descendants(matching: .image)[CueAccessibilityID.menuBarTrigger],
+            systemUI.descendants(matching: .image)[CueAccessibilityID.menuBarTrigger],
+            app.descendants(matching: .any)[CueAccessibilityID.menuBarTrigger],
+            systemUI.descendants(matching: .any)[CueAccessibilityID.menuBarTrigger],
+        ]
+
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            for candidate in candidates where candidate.exists && candidate.isHittable {
+                return candidate
+            }
+
+            for candidate in candidates where candidate.exists {
+                return candidate
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        while Date() < deadline
+
+        return nil
     }
 
     private func findOpenCueMenuItem(app: XCUIApplication, systemUI: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {

@@ -88,6 +88,59 @@ struct WhisperKitTranscriptionServiceTests {
             try await service.stopRecording()
         }
     }
+
+    @Test func startRecordingRejectsASecondConcurrentRecording() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+
+        await #expect(throws: CueError.recordingAlreadyInProgress) {
+            try await service.startRecording()
+        }
+    }
+
+    @Test func stopRecordingRejectsClipsShorterThanMinimumDuration() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.audioSamples = Array(repeating: Float(0), count: 1_000)
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+
+        do {
+            _ = try await service.stopRecording()
+            #expect(Bool(false), "Expected recordingTooShort error")
+        } catch let error as CueError {
+            guard case .recordingTooShort(let actual, let minimum) = error else {
+                #expect(Bool(false), "Expected recordingTooShort but got \(error)")
+                return
+            }
+
+            #expect(actual < minimum)
+            #expect(minimum == CueAppConfiguration.minimumRecordingDuration)
+        }
+    }
+
+    @Test func stopRecordingMapsUnexpectedTranscriptionErrors() async throws {
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.transcribeError = NSError(
+            domain: "CueTests",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "decoder offline"]
+        )
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
+        let service = WhisperKitTranscriptionService(clientFactory: factory)
+
+        try await service.startRecording()
+
+        await #expect(throws: CueError.transcriptionFailed("decoder offline")) {
+            try await service.stopRecording()
+        }
+    }
 }
 
 private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {

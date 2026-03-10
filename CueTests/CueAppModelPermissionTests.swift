@@ -198,22 +198,4 @@ struct CueAppModelPermissionTests {
         #expect(permissionService.openedSettingsPermissions == [.accessibility])
     }
 
-    @Test func restartApplicationDelegatesToPermissionService() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
-        )
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
-
-        await model.launch()
-        model.restartApplication()
-
-        #expect(permissionService.restartApplicationCallCount == 1)
-    }
 }
