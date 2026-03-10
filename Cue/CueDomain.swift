@@ -175,49 +175,17 @@ struct CueInsertionResult: Equatable {
 
 enum CueInsertionDelivery: Equatable {
     case pasteCommandSent
-    case copiedToClipboard(CueClipboardFallbackReason)
 
     var title: String {
-        switch self {
-        case .pasteCommandSent:
-            return "Paste Command Sent"
-        case .copiedToClipboard:
-            return "Copied to Clipboard"
-        }
+        "Paste Command Sent"
     }
 
     var detail: String {
-        switch self {
-        case .pasteCommandSent:
-            return "Cue sent Command-V to the frontmost app and left the transcript on the clipboard in case manual paste is still needed."
-        case .copiedToClipboard(let reason):
-            return reason.description
-        }
+        "Cue sent Command-V to the frontmost app and left the transcript on the clipboard in case manual paste is still needed."
     }
 
     var usedAutomaticPaste: Bool {
-        if case .pasteCommandSent = self {
-            return true
-        }
-
-        return false
-    }
-}
-
-enum CueClipboardFallbackReason: Equatable {
-    case noFrontmostApplication
-    case targetWasCue
-    case postEventSubmissionFailed(String)
-
-    var description: String {
-        switch self {
-        case .noFrontmostApplication:
-            return "Cue could not determine a destination app, so it copied the transcript to the clipboard."
-        case .targetWasCue:
-            return "Cue was still frontmost, so it copied the transcript to the clipboard instead of pasting back into itself."
-        case .postEventSubmissionFailed(let message):
-            return "Automatic paste failed (\(message)). Cue left the transcript on the clipboard."
-        }
+        true
     }
 }
 

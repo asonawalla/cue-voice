@@ -7,6 +7,8 @@ final class CueUITests: XCTestCase {
 
     func testLaunchShowsMenuBarPopoverInUITestMode() throws {
         let app = XCUIApplication()
+        let systemUI = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
+
         app.launchArguments = ["--ui-testing"]
         app.launch()
         app.activate()
@@ -22,7 +24,9 @@ final class CueUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Push to Talk"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.shortcutRecorder].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.pushToTalkSection].exists)
         XCTAssertTrue(app.buttons["Quit Cue"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.quitButton].exists)
     }
 
     private func openMenuBarPopover(using menuBarItem: XCUIElement, popover: XCUIElement) {
