@@ -138,7 +138,7 @@ struct CueAppPresentation: Equatable {
                 return state.setup.modelStatus.title
             }
 
-            return "Hold the push-to-talk shortcut in any app."
+            return nil
         }
     }
 

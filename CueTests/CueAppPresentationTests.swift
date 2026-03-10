@@ -49,5 +49,6 @@ struct CueAppPresentationTests {
 
         #expect(!presentation.needsPermissionPrompt)
         #expect(presentation.menuBarPrimaryStatus == "Ready")
+        #expect(presentation.menuBarSecondaryStatus == nil)
     }
 }
