@@ -39,5 +39,6 @@ private struct CueMenuBarLabelView: View {
     var body: some View {
         Image(systemName: model.menuBarSymbolName)
             .accessibilityLabel(model.menuBarPrimaryStatus)
+            .accessibilityIdentifier(CueAccessibilityID.menuBarTrigger)
     }
 }

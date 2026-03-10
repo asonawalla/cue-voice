@@ -38,6 +38,7 @@ struct CuePopoverView: View {
         }
         .frame(width: 320)
         .popoverBackground()
+        .accessibilityIdentifier(CueAccessibilityID.popoverRoot)
         .animation(.easeInOut(duration: 0.2), value: model.needsPermissionPrompt)
         .animation(.easeInOut(duration: 0.2), value: model.shouldOfferModelRetry)
         .animation(.easeInOut(duration: 0.25), value: model.errorMessage != nil)
@@ -143,9 +144,13 @@ struct CuePopoverView: View {
                 .font(.system(.subheadline, design: .rounded).weight(.medium))
                 .foregroundStyle(CueTheme.ink)
 
-            KeyboardShortcuts.Recorder("Shortcut", name: .pushToTalk) { shortcut in
-                hotkeyManager.updateShortcutSummary(shortcut)
+            VStack(spacing: 0) {
+                KeyboardShortcuts.Recorder("Shortcut", name: .pushToTalk) { shortcut in
+                    hotkeyManager.updateShortcutSummary(shortcut)
+                }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(CueAccessibilityID.shortcutRecorder)
 
             Text(
                 hotkeyManager.hasConfiguredShortcut
@@ -158,6 +163,8 @@ struct CuePopoverView: View {
         .padding(CueTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CueAccessibilityID.pushToTalkSection)
     }
 
     private var modelRetrySection: some View {
@@ -206,6 +213,7 @@ struct CuePopoverView: View {
                 Spacer()
             }
         }
+        .accessibilityIdentifier(CueAccessibilityID.quitButton)
         .buttonStyle(CueFooterActionButtonStyle(isHovered: isQuitHovered))
         .onHover { isHovering in
             isQuitHovered = isHovering

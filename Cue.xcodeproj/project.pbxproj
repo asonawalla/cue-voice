@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1C4D5E6F708192A3B4C5D6E7 /* CueAccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */; };
 		2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */; };
 		9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* WhisperKit */; };
 /* End PBXBuildFile section */
@@ -39,6 +40,7 @@
 		1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Cue-Base.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueTests-Base.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueUITests-Base.xcconfig"; sourceTree = "<group>"; };
+		1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cue/CueAccessibilityID.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -90,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				1A2B3C4D5E6F708192A3B4C6 /* README.md */,
+				1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */,
 				1A2B3C4D5E6F708192A3B4D0 /* Config */,
 				05A71C952F5A93C3009A5F0F /* Cue */,
 				05A71CA32F5A93C4009A5F0F /* CueTests */,
@@ -285,6 +288,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1C4D5E6F708192A3B4C5D6E7 /* CueAccessibilityID.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
