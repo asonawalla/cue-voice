@@ -55,89 +55,59 @@ final class PasteboardInsertionService: TextInsertionService {
             throw CueError.emptyTranscript
         }
 
-        let targetResolution = frontmostTargetApplication()
+        let targetApplication = try frontmostTargetApplication()
 
-        switch targetResolution {
-        case .fallback(let reason):
-            return try copyTranscriptToClipboard(text, reason: reason, targetApplication: nil)
-        case .target(let targetApplication):
-            guard hasAccessibilityPermission() else {
-                throw CueError.accessibilityPermissionDenied
-            }
-
-            do {
-                _ = try writeTranscriptToPasteboard(text)
-            } catch {
-                logger.error("Failed to write transcript to the pasteboard")
-                throw error
-            }
-
-            let pasteStartedAt = Date()
-
-            do {
-                try pasteCommandPoster.postPasteCommand(to: targetApplication.processIdentifier)
-            } catch {
-                return try copyTranscriptToClipboard(
-                    text,
-                    reason: .postEventSubmissionFailed(error.localizedDescription),
-                    targetApplication: targetApplication,
-                    pasteStartedAt: pasteStartedAt
-                )
-            }
-
-            let pasteDuration = Date().timeIntervalSince(pasteStartedAt)
-            let targetAppName = targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "Unknown App"
-
-            logger.info(
-                "Sent paste command to \(targetAppName, privacy: .public) in \(pasteDuration, format: .fixed(precision: 2))s; transcript remains on clipboard"
-            )
-
-            return CueInsertionResult(
-                delivery: .pasteCommandSent,
-                targetAppName: targetAppName,
-                targetBundleIdentifier: targetApplication.bundleIdentifier,
-                pasteDuration: pasteDuration
-            )
+        guard hasAccessibilityPermission() else {
+            throw CueError.accessibilityPermissionDenied
         }
-    }
 
-    private func copyTranscriptToClipboard(
-        _ text: String,
-        reason: CueClipboardFallbackReason,
-        targetApplication: CueRunningApplication?,
-        pasteStartedAt: Date? = nil
-    ) throws -> CueInsertionResult {
-        _ = try writeTranscriptToPasteboard(text)
+        do {
+            _ = try writeTranscriptToPasteboard(text)
+        } catch {
+            logger.error("Failed to write transcript to the pasteboard")
+            throw error
+        }
 
-        let pasteDuration = pasteStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-        let targetAppName = targetApplication?.localizedName ?? targetApplication?.bundleIdentifier
+        let pasteStartedAt = Date()
+
+        do {
+            try pasteCommandPoster.postPasteCommand(to: targetApplication.processIdentifier)
+        } catch {
+            logger.error(
+                "Failed to send paste command to \(targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "unknown app", privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            throw CueError.pasteFailed(error.localizedDescription)
+        }
+
+        let pasteDuration = Date().timeIntervalSince(pasteStartedAt)
+        let targetAppName = targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "Unknown App"
 
         logger.info(
-            "Copied transcript to clipboard. reason=\(reason.description, privacy: .public) target=\(targetAppName ?? "none", privacy: .public)"
+            "Sent paste command to \(targetAppName, privacy: .public) in \(pasteDuration, format: .fixed(precision: 2))s; transcript remains on clipboard"
         )
 
         return CueInsertionResult(
-            delivery: .copiedToClipboard(reason),
+            delivery: .pasteCommandSent,
             targetAppName: targetAppName,
-            targetBundleIdentifier: targetApplication?.bundleIdentifier,
+            targetBundleIdentifier: targetApplication.bundleIdentifier,
             pasteDuration: pasteDuration
         )
     }
 
-    private func frontmostTargetApplication() -> TargetApplicationResolution {
+    private func frontmostTargetApplication() throws -> CueRunningApplication {
         guard let application = applicationResolver.frontmostApplication() else {
-            return .fallback(.noFrontmostApplication)
+            throw CueError.noFrontmostApplication
         }
 
         if let mainBundleIdentifier, application.bundleIdentifier == mainBundleIdentifier {
-            return .fallback(.targetWasCue)
+            throw CueError.cannotPasteIntoCue
         }
 
         guard application.localizedName != nil || application.bundleIdentifier != nil else {
-            return .fallback(.noFrontmostApplication)
+            throw CueError.noFrontmostApplication
         }
 
-        return .target(application)
+        return application
     }
 
     private func writeTranscriptToPasteboard(_ text: String) throws -> Int {
@@ -149,11 +119,6 @@ final class PasteboardInsertionService: TextInsertionService {
 
         return 0
     }
-}
-
-private enum TargetApplicationResolution {
-    case target(CueRunningApplication)
-    case fallback(CueClipboardFallbackReason)
 }
 
 private final class WorkspaceFrontmostApplicationResolver: FrontmostApplicationResolving {

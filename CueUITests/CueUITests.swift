@@ -5,16 +5,24 @@ final class CueUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testLaunchShowsMainWindowInUITestMode() throws {
+    func testLaunchShowsMenuBarPopoverInUITestMode() throws {
         let app = XCUIApplication()
+        let systemUI = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
+
         app.launchArguments = ["--ui-testing"]
         app.launch()
         app.activate()
 
-        let window = app.windows.element(boundBy: 0)
-        XCTAssertTrue(window.waitForExistence(timeout: 10))
-        XCTAssertTrue(window.staticTexts["Push to Talk"].waitForExistence(timeout: 10))
-        XCTAssertTrue(window.staticTexts["Transcript"].exists)
-        XCTAssertTrue(window.staticTexts["Latency"].exists)
+        let menuBarItem = systemUI.menuBars.buttons["Ready"]
+        XCTAssertTrue(menuBarItem.waitForExistence(timeout: 10))
+        menuBarItem.click()
+
+        let popover = app.descendants(matching: .any)[CueAccessibilityID.popoverRoot]
+        XCTAssertTrue(popover.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Push to Talk"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.pushToTalkSection].exists)
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.shortcutRecorder].exists)
+        XCTAssertTrue(app.buttons["Quit Cue"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.quitButton].exists)
     }
 }

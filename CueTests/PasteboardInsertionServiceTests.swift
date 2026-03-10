@@ -28,7 +28,24 @@ struct PasteboardInsertionServiceTests {
         }
     }
 
-    @Test func insertSkipsPastingIntoCueItself() async throws {
+    @Test func insertWithoutFrontmostTargetThrowsError() async throws {
+        let pasteboard = FakePasteboardWriter()
+        let service = PasteboardInsertionService(
+            applicationResolver: FakeFrontmostApplicationResolver(application: nil),
+            pasteboard: pasteboard,
+            pasteCommandPoster: FakePasteCommandPoster(),
+            hasAccessibilityPermission: { true },
+            mainBundleIdentifier: "dev.sonawalla.Cue"
+        )
+
+        await #expect(throws: CueError.noFrontmostApplication) {
+            _ = try await service.insert("hello")
+        }
+
+        #expect(pasteboard.writtenStrings.isEmpty)
+    }
+
+    @Test func insertWhenCueIsFrontmostThrowsError() async throws {
         let resolver = FakeFrontmostApplicationResolver(
             application: CueRunningApplication(
                 processIdentifier: 7,
@@ -45,13 +62,14 @@ struct PasteboardInsertionServiceTests {
             mainBundleIdentifier: "dev.sonawalla.Cue"
         )
 
-        let result = try await service.insert("hello")
+        await #expect(throws: CueError.cannotPasteIntoCue) {
+            _ = try await service.insert("hello")
+        }
 
-        #expect(result.delivery == .copiedToClipboard(.targetWasCue))
-        #expect(pasteboard.writtenStrings == ["hello"])
+        #expect(pasteboard.writtenStrings.isEmpty)
     }
 
-    @Test func posterFailureFallsBackToClipboard() async throws {
+    @Test func posterFailureThrowsPasteError() async throws {
         let resolver = FakeFrontmostApplicationResolver(
             application: CueRunningApplication(
                 processIdentifier: 9,
@@ -70,11 +88,12 @@ struct PasteboardInsertionServiceTests {
             mainBundleIdentifier: "dev.sonawalla.Cue"
         )
 
-        let result = try await service.insert("hello")
+        await #expect(throws: CueError.pasteFailed("event bridge down")) {
+            _ = try await service.insert("hello")
+        }
 
-        #expect(result.delivery == .copiedToClipboard(.postEventSubmissionFailed("event bridge down")))
         #expect(poster.postedProcessIdentifiers == [9])
-        #expect(pasteboard.writtenStrings == ["hello", "hello"])
+        #expect(pasteboard.writtenStrings == ["hello"])
     }
 
     @Test func readyTargetPostsPasteCommand() async throws {
