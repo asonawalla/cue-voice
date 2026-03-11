@@ -182,6 +182,13 @@ struct CueInsertionResult: Equatable {
     let targetAppName: String?
     let targetBundleIdentifier: String?
     let pasteDuration: TimeInterval
+    let clipboardRestoreState: CueClipboardRestoreState
+}
+
+enum CueClipboardRestoreState: Equatable {
+    case restored
+    case skippedClipboardChanged
+    case failed
 }
 
 enum CueInsertionDelivery: Equatable {
@@ -192,7 +199,7 @@ enum CueInsertionDelivery: Equatable {
     }
 
     var detail: String {
-        "Cue sent Command-V to the frontmost app and left the transcript on the clipboard in case manual paste is still needed."
+        "Cue sent Command-V to the frontmost app and then restored the previous clipboard when it was still safe to do so."
     }
 
     var usedAutomaticPaste: Bool {

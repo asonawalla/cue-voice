@@ -56,7 +56,8 @@ final class FakeTextInsertionService: TextInsertionService {
         delivery: .pasteCommandSent,
         targetAppName: "TextEdit",
         targetBundleIdentifier: "com.apple.TextEdit",
-        pasteDuration: 0.12
+        pasteDuration: 0.12,
+        clipboardRestoreState: .restored
     )
 
     func insert(_ text: String) async throws -> CueInsertionResult {
