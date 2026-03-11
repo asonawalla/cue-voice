@@ -35,19 +35,14 @@ struct CuePermissionSectionPresentation: Equatable {
     let secondaryAction: CueAppAction?
 }
 
-struct CueSetupPresentation: Equatable {
-    let statusSummary: String
-    let microphone: CuePermissionSectionPresentation
-    let accessibility: CuePermissionSectionPresentation
-}
-
 struct CueAppPresentation: Equatable {
     let needsPermissionPrompt: Bool
     let shouldOfferModelRetry: Bool
     let menuBarSymbolName: String
     let menuBarPrimaryStatus: String
     let menuBarSecondaryStatus: String?
-    let setup: CueSetupPresentation
+    let microphonePermission: CuePermissionSectionPresentation
+    let accessibilityPermission: CuePermissionSectionPresentation
 
     init(state: CueAppState) {
         let hasLoadedPermissions = state.setup.hasLoadedPermissions
@@ -60,11 +55,8 @@ struct CueAppPresentation: Equatable {
         menuBarPrimaryStatus = CueAppPresentation.makeMenuBarPrimaryStatus(state: state)
         menuBarSecondaryStatus = CueAppPresentation.makeMenuBarSecondaryStatus(state: state)
 
-        setup = CueSetupPresentation(
-            statusSummary: permissions.setupSummary,
-            microphone: CueAppPresentation.makeMicrophonePresentation(for: permissions.microphone),
-            accessibility: CueAppPresentation.makeAccessibilityPresentation(for: permissions.accessibility)
-        )
+        microphonePermission = CueAppPresentation.makeMicrophonePresentation(for: permissions.microphone)
+        accessibilityPermission = CueAppPresentation.makeAccessibilityPresentation(for: permissions.accessibility)
     }
 
     private static func makeMenuBarSymbolName(state: CueAppState) -> String {

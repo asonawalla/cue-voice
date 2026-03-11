@@ -12,8 +12,8 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.needsPermissionPrompt)
-        #expect(presentation.setup.accessibility.primaryAction == .requestAccessibilityPermission)
-        #expect(presentation.setup.accessibility.secondaryAction == .openAccessibilitySettings)
+        #expect(presentation.accessibilityPermission.primaryAction == .requestAccessibilityPermission)
+        #expect(presentation.accessibilityPermission.secondaryAction == .openAccessibilitySettings)
     }
 
     @Test func failedModelPreparationPresentationOffersRetryAction() {

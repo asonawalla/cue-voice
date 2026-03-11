@@ -63,26 +63,26 @@ struct CueMainWindowView: View {
     }
 
     private var setupSection: some View {
-        let setup = model.presentation.setup
+        let presentation = model.presentation
 
         return VStack(alignment: .leading, spacing: 16) {
-            if let micAction = setup.microphone.primaryAction {
+            if let micAction = presentation.microphonePermission.primaryAction {
                 permissionRow(
                     title: "Microphone",
-                    detail: setup.microphone.detail,
+                    detail: presentation.microphonePermission.detail,
                     isGranted: model.permissionSnapshot.isMicrophoneReady,
                     primaryAction: micAction,
-                    secondaryAction: setup.microphone.secondaryAction
+                    secondaryAction: presentation.microphonePermission.secondaryAction
                 )
             }
 
-            if let accessAction = setup.accessibility.primaryAction {
+            if let accessAction = presentation.accessibilityPermission.primaryAction {
                 permissionRow(
                     title: "Accessibility",
-                    detail: setup.accessibility.detail,
+                    detail: presentation.accessibilityPermission.detail,
                     isGranted: model.permissionSnapshot.isAccessibilityReady,
                     primaryAction: accessAction,
-                    secondaryAction: setup.accessibility.secondaryAction
+                    secondaryAction: presentation.accessibilityPermission.secondaryAction
                 )
             }
         }
