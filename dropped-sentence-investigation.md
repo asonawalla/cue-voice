@@ -53,27 +53,28 @@ This remains plausible, but it does not explain the shared-buffer risk.
 
 WhisperKit has chunking behavior for longer clips, but this looks less likely unless the affected dictations are unusually long.
 
-## What we should log next
+## Current debug capture implementation
 
-The first useful debug instrumentation should stay simple:
+The current debug instrumentation stays intentionally simple:
 
 1. Save the exact audio snapshot that Cue sends into WhisperKit for transcription.
 2. Save the raw WhisperKit transcription results for that snapshot.
-3. Save the final flattened transcript that Cue pastes.
+3. Save the final flattened transcript that Cue produces.
 
 That is enough to answer the next question:
 
 - If the saved audio file itself is missing the sentence, the problem is in capture or stop-time handoff.
 - If the saved audio contains the sentence but WhisperKit output does not, the problem is in decoding.
 
-## Suggested debug artifact layout
+## Current debug artifact layout
 
-- Saved audio artifacts:
-  - `~/Library/Containers/dev.sonawalla.Cue/Data/Library/Application Support/Cue/DebugCaptures/<capture-id>/`
-- Tail-able debug index:
-  - `~/Library/Containers/dev.sonawalla.Cue/Data/Library/Logs/Cue/debug.jsonl`
+When `Cue.debugCapturesEnabled` is enabled, Cue writes debug captures under the app container caches directory:
 
-Each capture should include:
+- `~/Library/Containers/dev.sonawalla.Cue/Data/Library/Caches/dev.sonawalla.Cue/DebugCaptures/<yyyy-mm-dd>/<capture-id>/`
+
+There is currently no separate `debug.jsonl` index in `Library/Logs`.
+
+Each capture currently includes:
 
 - `clip.wav`
 - `result.json`
@@ -87,4 +88,4 @@ Each capture should include:
 
 This is still a hypothesis, not a validated root cause.
 
-The next time the bug reproduces, the saved `clip.wav` plus WhisperKit output should tell us whether the sentence was lost before or during transcription.
+We are collecting data from the current debug capture implementation above. The next time the bug reproduces, the saved `clip.wav` plus `result.json` should tell us whether the sentence was lost before or during transcription.
