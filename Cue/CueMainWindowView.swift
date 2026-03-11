@@ -4,6 +4,7 @@ import SwiftUI
 struct CueMainWindowView: View {
     @Bindable var model: CueAppModel
     @Bindable var hotkeyManager: CueHotkeyManager
+    @State private var isDiagnosticsExpanded = false
 
     var body: some View {
         ScrollView {
@@ -136,59 +137,134 @@ struct CueMainWindowView: View {
 
     private var readySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Push to Talk")
-                .font(.system(.subheadline, design: .rounded).weight(.medium))
-                .foregroundStyle(CueTheme.ink)
+            primarySectionCard(title: "Push to Talk", accessibilityID: CueAccessibilityID.pushToTalkSection) {
+                VStack(spacing: 0) {
+                    KeyboardShortcuts.Recorder("Shortcut", name: .pushToTalk) { shortcut in
+                        hotkeyManager.updateShortcutSummary(shortcut)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier(CueAccessibilityID.shortcutRecorder)
 
-            VStack(spacing: 0) {
-                KeyboardShortcuts.Recorder("Shortcut", name: .pushToTalk) { shortcut in
-                    hotkeyManager.updateShortcutSummary(shortcut)
+                Text(
+                    hotkeyManager.hasConfiguredShortcut
+                        ? "Hold \(hotkeyManager.shortcutSummary) in any app to record."
+                        : "Set a shortcut to enable push-to-talk."
+                )
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(CueTheme.slate)
+            }
+
+            secondarySectionCard(title: "Diagnostics", accessibilityID: CueAccessibilityID.diagnosticsSection) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isDiagnosticsExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: isDiagnosticsExpanded ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(CueTheme.slate)
+
+                            Text("Debug transcription captures")
+                                .font(.system(.caption, design: .rounded).weight(.semibold))
+                                .foregroundStyle(CueTheme.ink)
+
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(CueAccessibilityID.diagnosticsDisclosure)
+                    .accessibilityValue(isDiagnosticsExpanded ? "Expanded" : "Collapsed")
+
+                    if isDiagnosticsExpanded {
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle(isOn: $model.debugCapturesEnabled) {
+                                    Text("Save Debug Transcription Captures")
+                                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                                        .foregroundStyle(CueTheme.ink)
+                                }
+                                .toggleStyle(.switch)
+
+                                Text("Save audio clips and transcription results for troubleshooting.")
+                                    .font(.system(.caption2, design: .rounded))
+                                    .foregroundStyle(CueTheme.slate)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier(CueAccessibilityID.debugCapturesToggle)
+
+                            HStack(spacing: 8) {
+                                Button("Open Debug Captures Folder") {
+                                    model.openDebugCapturesFolder()
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier(CueAccessibilityID.openDebugCapturesButton)
+
+                                Button("Clear Saved Captures", role: .destructive) {
+                                    model.clearDebugCaptures()
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier(CueAccessibilityID.clearDebugCapturesButton)
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
                 }
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(CueAccessibilityID.shortcutRecorder)
+        }
+    }
 
-            Text(
-                hotkeyManager.hasConfiguredShortcut
-                    ? "Hold \(hotkeyManager.shortcutSummary) in any app to record."
-                    : "Set a shortcut to enable push-to-talk."
-            )
-            .font(.system(.caption, design: .rounded))
-            .foregroundStyle(CueTheme.slate)
+    private func primarySectionCard<Content: View>(
+        title: String,
+        accessibilityID: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        sectionCard(
+            title: title,
+            titleFont: .system(.subheadline, design: .rounded).weight(.medium),
+            titleColor: CueTheme.ink,
+            accessibilityID: accessibilityID,
+            content: content
+        )
+    }
 
-            Divider()
+    private func secondarySectionCard<Content: View>(
+        title: String,
+        accessibilityID: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        sectionCard(
+            title: title,
+            titleFont: .system(.caption, design: .rounded).weight(.semibold),
+            titleColor: CueTheme.slate,
+            accessibilityID: accessibilityID,
+            content: content
+        )
+    }
 
-            Toggle(isOn: $model.debugCapturesEnabled) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Save Debug Transcription Captures")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(CueTheme.ink)
+    private func sectionCard<Content: View>(
+        title: String,
+        titleFont: Font,
+        titleColor: Color,
+        accessibilityID: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(titleFont)
+                .foregroundStyle(titleColor)
 
-                    Text("Stores `clip.wav` and `result.json` for each transcription in `\(model.debugCapturesLocationSummary)`." )
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(CueTheme.slate)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
-
-            HStack(spacing: 8) {
-                Button("Open Debug Captures Folder") {
-                    model.openDebugCapturesFolder()
-                }
-                .buttonStyle(.bordered)
-
-                Button("Clear Saved Captures", role: .destructive) {
-                    model.clearDebugCaptures()
-                }
-                .buttonStyle(.bordered)
-            }
+            content()
         }
         .padding(CueTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(CueAccessibilityID.pushToTalkSection)
+        .cueAccessibilityIdentifier(accessibilityID)
     }
 
     private var modelRetrySection: some View {
@@ -226,6 +302,17 @@ struct CueMainWindowView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCardTinted(tintColor: CueTheme.errorInk.opacity(0.2), cornerRadius: CueTheme.errorCornerRadius)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func cueAccessibilityIdentifier(_ accessibilityID: String?) -> some View {
+        if let accessibilityID {
+            accessibilityIdentifier(accessibilityID)
+        } else {
+            self
+        }
     }
 }
 

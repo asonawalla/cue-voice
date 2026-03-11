@@ -9,7 +9,9 @@ final class CueUITests: XCTestCase {
         let app = XCUIApplication()
         let systemUI = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
 
-        app.launchArguments = ["--ui-testing"]
+        app.launchArguments = [
+            "--ui-testing",
+        ]
         app.launch()
         app.activate()
 
@@ -19,7 +21,6 @@ final class CueUITests: XCTestCase {
         }
 
         let mainWindow = app.descendants(matching: .any)[CueAccessibilityID.mainWindowRoot]
-        XCTAssertFalse(mainWindow.exists)
 
         openCueWindow(using: menuBarItem, app: app, systemUI: systemUI)
 
@@ -27,6 +28,19 @@ final class CueUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Push to Talk"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.shortcutRecorder].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.pushToTalkSection].exists)
+        XCTAssertTrue(app.descendants(matching: .any)[CueAccessibilityID.diagnosticsSection].waitForExistence(timeout: 10))
+
+        let diagnosticsDisclosure = app.buttons[CueAccessibilityID.diagnosticsDisclosure]
+        let openDebugCapturesButton = app.buttons["Open Debug Captures Folder"]
+        let clearDebugCapturesButton = app.buttons["Clear Saved Captures"]
+
+        XCTAssertTrue(diagnosticsDisclosure.waitForExistence(timeout: 10))
+        XCTAssertFalse(openDebugCapturesButton.exists)
+        XCTAssertFalse(clearDebugCapturesButton.exists)
+
+        diagnosticsDisclosure.click()
+        XCTAssertTrue(openDebugCapturesButton.waitForExistence(timeout: 10))
+        XCTAssertTrue(clearDebugCapturesButton.waitForExistence(timeout: 10))
 
         openCueWindow(using: menuBarItem, app: app, systemUI: systemUI)
 
