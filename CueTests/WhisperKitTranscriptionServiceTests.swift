@@ -141,6 +141,122 @@ struct WhisperKitTranscriptionServiceTests {
             try await service.stopRecording()
         }
     }
+
+    @Test func stopRecordingSavesDebugCaptureArtifactsWhenEnabled() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
+
+        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
+        client.transcriptions = [
+            WhisperKitTranscriptionSegment(text: "hello world", language: "en", modelLoadDuration: 0.2, pipelineDuration: 0.4)
+        ]
+
+        let service = WhisperKitTranscriptionService(
+            defaults: defaults,
+            clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
+            debugCaptureStore: DebugCaptureStore(rootDirectory: captureRoot)
+        )
+
+        try await service.startRecording()
+        let result = try await service.stopRecording()
+
+        #expect(result.text == "hello world")
+
+        let captureFolders = try FileManager.default.contentsOfDirectory(
+            at: captureRoot,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        #expect(captureFolders.count == 1)
+
+        let dayFolder = captureFolders[0]
+        let captures = try FileManager.default.contentsOfDirectory(
+            at: dayFolder,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        #expect(captures.count == 1)
+
+        let captureFolder = captures[0]
+        let wavURL = captureFolder.appendingPathComponent("clip.wav")
+        let resultURL = captureFolder.appendingPathComponent("result.json")
+
+        #expect(FileManager.default.fileExists(atPath: wavURL.path))
+        #expect(FileManager.default.fileExists(atPath: resultURL.path))
+
+        let resultData = try Data(contentsOf: resultURL)
+        let document = try JSONDecoder().decode(DebugCaptureResultDocument.self, from: resultData)
+
+        #expect(document.sampleCount == 32_000)
+        #expect(document.finalTranscript == "hello world")
+        #expect(document.errorMessage == nil)
+        #expect(document.rawSegments.map(\.text) == ["hello world"])
+    }
+
+    @Test func stopRecordingSavesDebugCaptureErrorArtifactsWhenTranscriptionFails() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
+
+        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
+        client.transcribeError = NSError(
+            domain: "CueTests",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "decoder offline"]
+        )
+
+        let service = WhisperKitTranscriptionService(
+            defaults: defaults,
+            clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
+            debugCaptureStore: DebugCaptureStore(rootDirectory: captureRoot)
+        )
+
+        try await service.startRecording()
+
+        await #expect(throws: CueError.transcriptionFailed("decoder offline")) {
+            try await service.stopRecording()
+        }
+
+        let dayFolder = try #require(try firstDirectory(at: captureRoot))
+        let captureFolder = try #require(try firstDirectory(at: dayFolder))
+        let resultData = try Data(contentsOf: captureFolder.appendingPathComponent("result.json"))
+        let document = try JSONDecoder().decode(DebugCaptureResultDocument.self, from: resultData)
+
+        #expect(document.finalTranscript.isEmpty)
+        #expect(document.errorMessage == "decoder offline")
+        #expect(document.rawSegments.isEmpty)
+    }
+
+    @Test func stopRecordingIgnoresDebugCaptureWriteFailures() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
+
+        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let client = FakeWhisperKitClient()
+        client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
+
+        let service = WhisperKitTranscriptionService(
+            defaults: defaults,
+            clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
+            debugCaptureStore: FailingDebugCaptureStore()
+        )
+
+        try await service.startRecording()
+        let result = try await service.stopRecording()
+
+        #expect(result.text == "hello")
+    }
 }
 
 private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
@@ -223,4 +339,38 @@ private final class FakeWhisperKitClient: WhisperKitClient {
 
         return transcriptions
     }
+}
+
+private final class FailingDebugCaptureStore: DebugCaptureStoring {
+    func createCapture(audioSamples: [Float], recordingDuration: TimeInterval) async throws -> DebugCaptureHandle {
+        _ = audioSamples
+        _ = recordingDuration
+        throw NSError(domain: "CueTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "disk full"])
+    }
+
+    func saveResult(
+        for capture: DebugCaptureHandle,
+        sampleCount: Int,
+        recordingDuration: TimeInterval,
+        segments: [WhisperKitTranscriptionSegment],
+        finalTranscript: String,
+        errorMessage: String?
+    ) async throws {
+        _ = capture
+        _ = sampleCount
+        _ = recordingDuration
+        _ = segments
+        _ = finalTranscript
+        _ = errorMessage
+        throw NSError(domain: "CueTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "disk full"])
+    }
+}
+
+private func firstDirectory(at url: URL) throws -> URL? {
+    let entries = try FileManager.default.contentsOfDirectory(
+        at: url,
+        includingPropertiesForKeys: nil,
+        options: [.skipsHiddenFiles]
+    )
+    return entries.first
 }

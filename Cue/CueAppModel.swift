@@ -2,13 +2,28 @@ import AppKit
 import Foundation
 import Observation
 
+protocol WorkspaceOpening {
+    @discardableResult
+    func open(_ url: URL) -> Bool
+}
+
+extension NSWorkspace: WorkspaceOpening {}
+
 @MainActor
 @Observable
 final class CueAppModel: CueStateStore {
     var state: CueAppState
+    var debugCapturesEnabled: Bool {
+        didSet {
+            defaults.set(debugCapturesEnabled, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
+        }
+    }
 
     private let workflowCoordinator: CueWorkflowCoordinator
     private let notificationCenter: NotificationCenter
+    private let defaults: UserDefaults
+    private let fileManager: FileManager
+    private let workspace: any WorkspaceOpening
 
     private var activationObserver: NSObjectProtocol?
 
@@ -17,13 +32,23 @@ final class CueAppModel: CueStateStore {
         insertionService: TextInsertionService? = nil,
         permissionService: PermissionService? = nil,
         soundService: (any SoundService)? = nil,
+        defaults: UserDefaults = .standard,
+        fileManager: FileManager = .default,
+        workspace: any WorkspaceOpening = NSWorkspace.shared,
         notificationCenter: NotificationCenter = .default
     ) {
-        let transcriptionService = transcriptionService ?? WhisperKitTranscriptionService()
+        let transcriptionService = transcriptionService ?? WhisperKitTranscriptionService(
+            fileManager: fileManager,
+            defaults: defaults
+        )
         let insertionService = insertionService ?? PasteboardInsertionService()
         let permissionService = permissionService ?? SystemPermissionService()
         let soundService = soundService ?? SystemSoundService()
 
+        self.defaults = defaults
+        self.fileManager = fileManager
+        self.workspace = workspace
+        debugCapturesEnabled = defaults.bool(forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
         self.workflowCoordinator = CueWorkflowCoordinator(
             transcriptionService: transcriptionService,
             insertionService: insertionService,
@@ -114,6 +139,10 @@ final class CueAppModel: CueStateStore {
         state.session
     }
 
+    var debugCapturesLocationSummary: String {
+        CueAppConfiguration.debugCaptureDisplayPath(fileManager: fileManager)
+    }
+
     func launch() async {
         await workflowCoordinator.launch()
     }
@@ -152,6 +181,21 @@ final class CueAppModel: CueStateStore {
 
     func handlePushToTalkReleased() async {
         await workflowCoordinator.handlePushToTalkReleased()
+    }
+
+    func openDebugCapturesFolder() {
+        let directoryURL = CueAppConfiguration.debugCaptureRootDirectory(fileManager: fileManager)
+        try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        _ = workspace.open(directoryURL)
+    }
+
+    func clearDebugCaptures() {
+        let directoryURL = CueAppConfiguration.debugCaptureRootDirectory(fileManager: fileManager)
+        guard fileManager.fileExists(atPath: directoryURL.path) else {
+            return
+        }
+
+        try? fileManager.removeItem(at: directoryURL)
     }
 
     func perform(_ action: CueAppAction) {

@@ -99,6 +99,34 @@ struct CueAppModelLifecycleTests {
         #expect(model.sessionState == .idle)
     }
 
+    @Test func debugCaptureTogglePersistsAcrossModelInstances() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let firstModel = CueAppModel(
+            transcriptionService: FakeTranscriptionService(),
+            insertionService: FakeTextInsertionService(),
+            permissionService: FakePermissionService(),
+            defaults: defaults,
+            notificationCenter: NotificationCenter()
+        )
+
+        #expect(!firstModel.debugCapturesEnabled)
+
+        firstModel.debugCapturesEnabled = true
+
+        let secondModel = CueAppModel(
+            transcriptionService: FakeTranscriptionService(),
+            insertionService: FakeTextInsertionService(),
+            permissionService: FakePermissionService(),
+            defaults: defaults,
+            notificationCenter: NotificationCenter()
+        )
+
+        #expect(secondModel.debugCapturesEnabled)
+    }
+
     private func yieldUntil(
         maxYields: Int = 20,
         condition: @escaping @MainActor () -> Bool

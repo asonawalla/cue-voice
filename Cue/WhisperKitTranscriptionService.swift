@@ -22,6 +22,7 @@ final class WhisperKitTranscriptionService: TranscriptionService {
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let clientFactory: WhisperKitClientFactory
+    private let debugCaptureStore: any DebugCaptureStoring
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Transcription")
 
     private var whisperKitClient: (any WhisperKitClient)?
@@ -30,11 +31,17 @@ final class WhisperKitTranscriptionService: TranscriptionService {
     init(
         fileManager: FileManager = .default,
         defaults: UserDefaults = .standard,
-        clientFactory: WhisperKitClientFactory? = nil
+        clientFactory: WhisperKitClientFactory? = nil,
+        debugCaptureStore: (any DebugCaptureStoring)? = nil
     ) {
         self.fileManager = fileManager
         self.defaults = defaults
         self.clientFactory = clientFactory ?? LiveWhisperKitClientFactory()
+        self.debugCaptureStore = debugCaptureStore
+            ?? DebugCaptureStore(
+                fileManager: fileManager,
+                rootDirectory: CueAppConfiguration.debugCaptureRootDirectory(fileManager: fileManager)
+            )
     }
 
     func prepareModel() async throws {
@@ -43,7 +50,7 @@ final class WhisperKitTranscriptionService: TranscriptionService {
             return
         }
 
-        let modelDirectory = CueAppConfiguration.modelDownloadDirectory
+        let modelDirectory = CueAppConfiguration.modelDownloadDirectory(fileManager: fileManager)
         try fileManager.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
 
         statusHandler?(.checkingCache)
@@ -120,9 +127,12 @@ final class WhisperKitTranscriptionService: TranscriptionService {
         recordingStartedAt = nil
 
         let audioSamples = whisperKitClient.audioSamples
+        let sampleCount = audioSamples.count
         let recordingDuration = Double(audioSamples.count) / Double(WhisperKit.sampleRate)
 
-        logger.info("Recording stopped after \(recordingDuration, format: .fixed(precision: 2)) seconds")
+        logger.info(
+            "Recording stopped after \(recordingDuration, format: .fixed(precision: 2)) seconds with \(sampleCount) samples"
+        )
 
         guard recordingDuration >= CueAppConfiguration.minimumRecordingDuration else {
             throw CueError.recordingTooShort(
@@ -131,30 +141,59 @@ final class WhisperKitTranscriptionService: TranscriptionService {
             )
         }
 
+        let debugCapture = await createDebugCaptureIfNeeded(
+            audioSamples: audioSamples,
+            recordingDuration: recordingDuration
+        )
+
+        let results: [WhisperKitTranscriptionSegment]
+
         do {
-            let results = try await whisperKitClient.transcribe(audioSamples: audioSamples, language: "en")
-            let transcript = results
-                .map(\.text)
-                .joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            guard !transcript.isEmpty,
-                  !Self.ignoredTranscriptSentinels.contains(transcript) else {
-                throw CueError.emptyTranscript
-            }
-
-            return CueTranscriptionResult(
-                text: transcript,
-                language: results.first?.language ?? "en",
-                recordingDuration: recordingDuration,
-                modelLoadDuration: results.map(\.modelLoadDuration).max() ?? 0,
-                pipelineDuration: results.map(\.pipelineDuration).reduce(0, +)
-            )
-        } catch let cueError as CueError {
-            throw cueError
+            results = try await whisperKitClient.transcribe(audioSamples: audioSamples, language: "en")
         } catch {
+            await saveDebugCaptureResult(
+                for: debugCapture,
+                sampleCount: sampleCount,
+                recordingDuration: recordingDuration,
+                segments: [],
+                finalTranscript: "",
+                errorMessage: error.localizedDescription
+            )
             throw CueError.transcriptionFailed(error.localizedDescription)
         }
+
+        let transcript = results
+            .map(\.text)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let transcriptError: CueError?
+        if transcript.isEmpty || Self.ignoredTranscriptSentinels.contains(transcript) {
+            transcriptError = .emptyTranscript
+        } else {
+            transcriptError = nil
+        }
+
+        await saveDebugCaptureResult(
+            for: debugCapture,
+            sampleCount: sampleCount,
+            recordingDuration: recordingDuration,
+            segments: results,
+            finalTranscript: transcript,
+            errorMessage: transcriptError?.errorDescription
+        )
+
+        if let transcriptError {
+            throw transcriptError
+        }
+
+        return CueTranscriptionResult(
+            text: transcript,
+            language: results.first?.language ?? "en",
+            recordingDuration: recordingDuration,
+            modelLoadDuration: results.map(\.modelLoadDuration).max() ?? 0,
+            pipelineDuration: results.map(\.pipelineDuration).reduce(0, +)
+        )
     }
 
     private func mapRecordingError(_ error: WhisperError) -> CueError {
@@ -174,6 +213,58 @@ final class WhisperKitTranscriptionService: TranscriptionService {
         }
 
         return URL(fileURLWithPath: cachedPath)
+    }
+
+    private var shouldSaveDebugCaptures: Bool {
+        defaults.bool(forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
+    }
+
+    private func createDebugCaptureIfNeeded(
+        audioSamples: [Float],
+        recordingDuration: TimeInterval
+    ) async -> DebugCaptureHandle? {
+        guard shouldSaveDebugCaptures else {
+            return nil
+        }
+
+        do {
+            let capture = try await debugCaptureStore.createCapture(
+                audioSamples: audioSamples,
+                recordingDuration: recordingDuration
+            )
+            logger.info("Saved debug capture audio to \(capture.directoryURL.path, privacy: .public)")
+            return capture
+        } catch {
+            logger.error("Failed to save debug capture audio: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    private func saveDebugCaptureResult(
+        for capture: DebugCaptureHandle?,
+        sampleCount: Int,
+        recordingDuration: TimeInterval,
+        segments: [WhisperKitTranscriptionSegment],
+        finalTranscript: String,
+        errorMessage: String?
+    ) async {
+        guard let capture else {
+            return
+        }
+
+        do {
+            try await debugCaptureStore.saveResult(
+                for: capture,
+                sampleCount: sampleCount,
+                recordingDuration: recordingDuration,
+                segments: segments,
+                finalTranscript: finalTranscript,
+                errorMessage: errorMessage
+            )
+            logger.info("Saved debug capture result to \(capture.directoryURL.path, privacy: .public)")
+        } catch {
+            logger.error("Failed to save debug capture result: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
 
@@ -199,7 +290,7 @@ protocol WhisperKitClient: AnyObject {
     func transcribe(audioSamples: [Float], language: String) async throws -> [WhisperKitTranscriptionSegment]
 }
 
-struct WhisperKitTranscriptionSegment: Equatable {
+struct WhisperKitTranscriptionSegment: Equatable, Sendable {
     let text: String
     let language: String?
     let modelLoadDuration: TimeInterval

@@ -155,6 +155,34 @@ struct CueMainWindowView: View {
             )
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(CueTheme.slate)
+
+            Divider()
+
+            Toggle(isOn: $model.debugCapturesEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Save Debug Transcription Captures")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CueTheme.ink)
+
+                    Text("Stores `clip.wav` and `result.json` for each transcription in `\(model.debugCapturesLocationSummary)`." )
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(CueTheme.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+
+            HStack(spacing: 8) {
+                Button("Open Debug Captures Folder") {
+                    model.openDebugCapturesFolder()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Clear Saved Captures", role: .destructive) {
+                    model.clearDebugCaptures()
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .padding(CueTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
