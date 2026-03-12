@@ -9,7 +9,8 @@ struct WhisperKitTranscriptionServiceTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let cachedModelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cachedModelFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
         try FileManager.default.createDirectory(at: cachedModelFolder, withIntermediateDirectories: true)
         defaults.set(cachedModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
 
@@ -23,6 +24,47 @@ struct WhisperKitTranscriptionServiceTests {
         #expect(factory.downloadCallCount == 0)
         #expect(factory.makeClientCallCount == 1)
         #expect(statuses == [.checkingCache, .loading, .ready])
+    }
+
+    @Test func prepareModelUsesCurrentHardcodedModelForDownloadAndLoad() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let modelFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
+        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+
+        try await service.prepareModel()
+
+        #expect(factory.downloadCallCount == 1)
+        #expect(factory.downloadedVariants == [CueAppConfiguration.modelID])
+        #expect(factory.makeClientModelIDs == [CueAppConfiguration.modelID])
+        #expect(defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == modelFolder.path)
+    }
+
+    @Test func prepareModelIgnoresCachedPathForPreviousModelVariant() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let staleModelFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openai_whisper-base.en")
+        try FileManager.default.createDirectory(at: staleModelFolder, withIntermediateDirectories: true)
+        defaults.set(staleModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
+
+        let currentModelFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let factory = FakeWhisperKitClientFactory(downloadResult: currentModelFolder)
+        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+
+        try await service.prepareModel()
+
+        #expect(factory.downloadCallCount == 1)
+        #expect(factory.downloadedVariants == [CueAppConfiguration.modelID])
+        #expect(factory.makeClientModelIDs == [CueAppConfiguration.modelID])
+        #expect(defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == currentModelFolder.path)
     }
 
     @Test func prepareModelReportsLoadFailuresSeparatelyFromDownloadFailures() async throws {
@@ -262,6 +304,8 @@ struct WhisperKitTranscriptionServiceTests {
 private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
     var downloadCallCount = 0
     var makeClientCallCount = 0
+    var downloadedVariants: [String] = []
+    var makeClientModelIDs: [String] = []
     var downloadResult: URL
     var downloadError: Error?
     var makeClientError: Error?
@@ -277,9 +321,9 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
         downloadBase: URL,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
-        _ = variant
         _ = downloadBase
         downloadCallCount += 1
+        downloadedVariants.append(variant)
         onProgress(0.5)
 
         if let downloadError {
@@ -294,10 +338,10 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
         modelDirectory: URL,
         modelFolder: URL
     ) async throws -> any WhisperKitClient {
-        _ = modelID
         _ = modelDirectory
         _ = modelFolder
         makeClientCallCount += 1
+        makeClientModelIDs.append(modelID)
 
         if let makeClientError {
             throw makeClientError

@@ -1,4 +1,5 @@
 import Foundation
+import CoreML
 import WhisperKit
 import os
 
@@ -89,7 +90,7 @@ final class WhisperKitTranscriptionService: TranscriptionService {
         }
 
         statusHandler?(.ready)
-        logger.info("WhisperKit model ready from \(modelFolder.path, privacy: .public)")
+        logger.info("WhisperKit model \(CueAppConfiguration.modelID, privacy: .public) ready from \(modelFolder.path, privacy: .public)")
     }
 
     func startRecording() async throws {
@@ -212,7 +213,14 @@ final class WhisperKitTranscriptionService: TranscriptionService {
             return nil
         }
 
-        return URL(fileURLWithPath: cachedPath)
+        let cachedModelFolder = URL(fileURLWithPath: cachedPath)
+        guard cachedModelFolder.lastPathComponent == CueAppConfiguration.expectedDownloadedModelFolderName(
+            for: CueAppConfiguration.modelID
+        ) else {
+            return nil
+        }
+
+        return cachedModelFolder
     }
 
     private var shouldSaveDebugCaptures: Bool {
@@ -317,6 +325,10 @@ private final class LiveWhisperKitClientFactory: WhisperKitClientFactory {
             model: modelID,
             downloadBase: modelDirectory,
             modelFolder: modelFolder.path,
+            computeOptions: ModelComputeOptions(
+                audioEncoderCompute: .cpuAndGPU,
+                textDecoderCompute: .cpuAndGPU
+            ),
             verbose: false,
             logLevel: .none,
             load: true,
