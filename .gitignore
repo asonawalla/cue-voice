@@ -9,3 +9,5 @@ xcuserdata/
 DerivedData/
 .build/
 .swiftpm/
+
+.agents
