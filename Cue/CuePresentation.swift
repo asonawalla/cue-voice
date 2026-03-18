@@ -5,7 +5,6 @@ enum CueAppAction: Hashable {
     case openMicrophoneSettings
     case requestAccessibilityPermission
     case openAccessibilitySettings
-    case restartApplication
     case retryModelPreparation
     case quit
 
@@ -19,8 +18,6 @@ enum CueAppAction: Hashable {
             return "Grant Accessibility Access"
         case .openAccessibilitySettings:
             return "Open Accessibility Settings"
-        case .restartApplication:
-            return "Restart Cue"
         case .retryModelPreparation:
             return "Retry Model Preparation"
         case .quit:

@@ -1,6 +1,6 @@
 import Foundation
 
-enum CuePermissionKind: CaseIterable, Equatable {
+enum CuePermissionKind: Equatable {
     case microphone
     case accessibility
 
@@ -10,24 +10,6 @@ enum CuePermissionKind: CaseIterable, Equatable {
             return "Microphone"
         case .accessibility:
             return "Accessibility"
-        }
-    }
-
-    var requirementSummary: String {
-        switch self {
-        case .microphone:
-            return "Cue needs microphone access to capture your speech."
-        case .accessibility:
-            return "Cue uses Accessibility to paste automatically into the focused app."
-        }
-    }
-
-    var systemSettingsPath: String {
-        switch self {
-        case .microphone:
-            return "System Settings > Privacy & Security > Microphone"
-        case .accessibility:
-            return "System Settings > Privacy & Security > Accessibility"
         }
     }
 }
@@ -56,15 +38,6 @@ enum CuePermissionState: Equatable {
 enum CueAccessibilityPermissionState: Equatable {
     case granted
     case notGranted
-
-    var title: String {
-        switch self {
-        case .granted:
-            return "Granted"
-        case .notGranted:
-            return "Not Granted"
-        }
-    }
 
     var isGranted: Bool {
         self == .granted
@@ -143,14 +116,6 @@ enum ModelPreparationStatus: Equatable {
         }
     }
 
-    var progressValue: Double? {
-        guard case .downloading(let progress) = self else {
-            return nil
-        }
-
-        return progress
-    }
-
     var isPreparing: Bool {
         switch self {
         case .checkingCache, .downloading, .loading:
@@ -195,18 +160,6 @@ enum CueClipboardRestoreState: Equatable {
 
 enum CueInsertionDelivery: Equatable {
     case pasteCommandSent
-
-    var title: String {
-        "Paste Command Sent"
-    }
-
-    var detail: String {
-        "Cue sent Command-V to the frontmost app and then restored the previous clipboard when it was still safe to do so."
-    }
-
-    var usedAutomaticPaste: Bool {
-        true
-    }
 }
 
 struct LatencyMetrics: Equatable {
@@ -357,10 +310,6 @@ enum CueSessionState: Equatable {
 struct CueFailure: Equatable {
     let cueError: CueError?
     let message: String
-
-    var isPermissionRelated: Bool {
-        cueError?.isPermissionRelated ?? false
-    }
 
     static func from(_ error: Error) -> CueFailure {
         let cueError = error as? CueError

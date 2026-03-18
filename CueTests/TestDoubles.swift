@@ -78,7 +78,6 @@ final class FakePermissionService: PermissionService {
     var currentSnapshotCallCount = 0
     var requestMicrophoneCallCount = 0
     var requestAccessibilityCallCount = 0
-    var restartApplicationCallCount = 0
     var openedSettingsPermissions: [CuePermissionKind] = []
     var microphoneRequestResult: CuePermissionState?
 
@@ -107,10 +106,6 @@ final class FakePermissionService: PermissionService {
 
     func openSystemSettings(for permission: CuePermissionKind) {
         openedSettingsPermissions.append(permission)
-    }
-
-    func restartApplication() {
-        restartApplicationCallCount += 1
     }
 }
 

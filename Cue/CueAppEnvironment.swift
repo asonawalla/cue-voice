@@ -54,8 +54,6 @@ private final class UITestPermissionService: PermissionService {
     func openSystemSettings(for permission: CuePermissionKind) {
         _ = permission
     }
-
-    func restartApplication() {}
 }
 
 @MainActor

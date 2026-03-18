@@ -72,10 +72,6 @@ final class CueSetupCoordinator {
         permissionService.requestAccessibilityPermission()
     }
 
-    func restartApplication() {
-        permissionService.restartApplication()
-    }
-
     func runFirstUsePermissionBootstrap() async {
         guard !isRunningPermissionBootstrap else {
             return

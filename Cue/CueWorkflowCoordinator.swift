@@ -81,10 +81,6 @@ final class CueWorkflowCoordinator {
         setupCoordinator.openAccessibilitySettings()
     }
 
-    func restartApplication() {
-        setupCoordinator.restartApplication()
-    }
-
     func handlePushToTalkPressed() async {
         await dictationCoordinator.handlePushToTalkPressed(using: setupCoordinator)
     }

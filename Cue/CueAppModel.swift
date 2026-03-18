@@ -75,14 +75,6 @@ final class CueAppModel: CueStateStore {
         state.setup.permissions
     }
 
-    var hasLoadedPermissionSnapshot: Bool {
-        state.setup.hasLoadedPermissions
-    }
-
-    var modelStatus: ModelPreparationStatus {
-        state.setup.modelStatus
-    }
-
     var transcript: String {
         state.transcript
     }
@@ -105,10 +97,6 @@ final class CueAppModel: CueStateStore {
 
     var isModelReady: Bool {
         state.isModelReady
-    }
-
-    var isModelPreparing: Bool {
-        state.setup.modelStatus.isPreparing
     }
 
     var isReadyToRecord: Bool {
@@ -139,10 +127,6 @@ final class CueAppModel: CueStateStore {
         state.session
     }
 
-    var debugCapturesLocationSummary: String {
-        CueAppConfiguration.debugCaptureDisplayPath(fileManager: fileManager)
-    }
-
     func launch() async {
         await workflowCoordinator.launch()
     }
@@ -165,10 +149,6 @@ final class CueAppModel: CueStateStore {
 
     func openAccessibilitySettings() {
         workflowCoordinator.openAccessibilitySettings()
-    }
-
-    func restartApplication() {
-        workflowCoordinator.restartApplication()
     }
 
     func retryModelPreparation() async {
@@ -210,8 +190,6 @@ final class CueAppModel: CueStateStore {
             openMicrophoneSettings()
         case .openAccessibilitySettings:
             openAccessibilitySettings()
-        case .restartApplication:
-            restartApplication()
         case .retryModelPreparation:
             Task {
                 await retryModelPreparation()

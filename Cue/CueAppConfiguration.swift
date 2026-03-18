@@ -18,10 +18,6 @@ enum CueAppConfiguration {
             .appendingPathComponent("DebugCaptures", isDirectory: true)
     }
 
-    nonisolated static func debugCaptureDisplayPath(fileManager: FileManager = .default) -> String {
-        NSString(string: debugCaptureRootDirectory(fileManager: fileManager).path).abbreviatingWithTildeInPath
-    }
-
     nonisolated private static func appDirectory(
         in searchPathDirectory: FileManager.SearchPathDirectory,
         fileManager: FileManager
