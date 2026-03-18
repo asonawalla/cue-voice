@@ -87,7 +87,8 @@ private final class UITestTextInsertionService: TextInsertionService {
             targetAppName: "Notes",
             targetBundleIdentifier: "com.apple.Notes",
             pasteDuration: 0.05,
-            clipboardRestoreState: .restored
+            clipboardRestoreState: .restored,
+            pasteCommandPostedAt: Date()
         )
     }
 }

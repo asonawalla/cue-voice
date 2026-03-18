@@ -183,6 +183,8 @@ struct CueInsertionResult: Equatable {
     let targetBundleIdentifier: String?
     let pasteDuration: TimeInterval
     let clipboardRestoreState: CueClipboardRestoreState
+    /// Timestamp captured immediately after Command-V was posted, before the clipboard restore grace period.
+    let pasteCommandPostedAt: Date
 }
 
 enum CueClipboardRestoreState: Equatable {

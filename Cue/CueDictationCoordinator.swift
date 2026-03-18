@@ -27,8 +27,6 @@ final class CueDictationCoordinator {
     }
 
     func handlePushToTalkPressed(using setupCoordinator: CueSetupCoordinator) async {
-        currentRun = DictationRunTiming(pressedAt: Date())
-
         guard let stateStore else {
             return
         }
@@ -64,6 +62,7 @@ final class CueDictationCoordinator {
             return
         }
 
+        currentRun = DictationRunTiming(pressedAt: Date())
         await startRecording()
     }
 
@@ -153,9 +152,12 @@ final class CueDictationCoordinator {
             }
 
             let insertionResult = try await insertionService.insert(result.text)
-            currentRun?.insertedAt = Date()
 
             let run = currentRun
+            let releaseToInsert = run?.releasedAt.map {
+                insertionResult.pasteCommandPostedAt.timeIntervalSince($0)
+            } ?? 0
+
             stateStore.updateState { state in
                 state.lastInsertionResult = insertionResult
                 state.latencyMetrics = LatencyMetrics(
@@ -167,13 +169,13 @@ final class CueDictationCoordinator {
                     backendPipelineDuration: result.pipelineDuration,
                     pressToAck: run?.pressToAck ?? 0,
                     releaseToProofOfLife: run?.releaseToProofOfLife ?? 0,
-                    releaseToInsert: run?.releaseToInsert ?? 0
+                    releaseToInsert: releaseToInsert
                 )
                 state.session = .idle
             }
 
             logger.info(
-                "Completed transcription and insertion. press_to_ack=\((run?.pressToAck ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_life=\((run?.releaseToProofOfLife ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_insert=\((run?.releaseToInsert ?? 0) * 1000, format: .fixed(precision: 0))ms | record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s"
+                "Completed transcription and insertion. press_to_ack=\((run?.pressToAck ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_life=\((run?.releaseToProofOfLife ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_insert=\(releaseToInsert * 1000, format: .fixed(precision: 0))ms | record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s"
             )
         } catch {
             present(error)
@@ -210,7 +212,6 @@ private struct DictationRunTiming {
     var ackAt: Date?
     var releasedAt: Date?
     var proofOfLifeAt: Date?
-    var insertedAt: Date?
 
     var pressToAck: TimeInterval {
         ackAt.map { $0.timeIntervalSince(pressedAt) } ?? 0
@@ -219,10 +220,5 @@ private struct DictationRunTiming {
     var releaseToProofOfLife: TimeInterval {
         guard let releasedAt, let proofOfLifeAt else { return 0 }
         return proofOfLifeAt.timeIntervalSince(releasedAt)
-    }
-
-    var releaseToInsert: TimeInterval {
-        guard let releasedAt, let insertedAt else { return 0 }
-        return insertedAt.timeIntervalSince(releasedAt)
     }
 }

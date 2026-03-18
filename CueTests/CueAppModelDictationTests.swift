@@ -21,7 +21,8 @@ struct CueAppModelDictationTests {
             targetAppName: "TextEdit",
             targetBundleIdentifier: "com.apple.TextEdit",
             pasteDuration: 0.18,
-            clipboardRestoreState: .restored
+            clipboardRestoreState: .restored,
+            pasteCommandPostedAt: Date()
         )
 
         let model = CueAppModel(

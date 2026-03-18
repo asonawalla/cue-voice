@@ -152,6 +152,7 @@ final class PasteboardInsertionService: TextInsertionService {
             throw CueError.pasteFailed(error.localizedDescription)
         }
 
+        let pasteCommandPostedAt = Date()
         await sleepAfterPaste(pasteRestoreGracePeriod)
 
         let restoreState = restoreClipboardIfOwned(
@@ -168,7 +169,8 @@ final class PasteboardInsertionService: TextInsertionService {
             targetAppName: targetAppName,
             targetBundleIdentifier: targetApplication.bundleIdentifier,
             pasteDuration: pasteDuration,
-            clipboardRestoreState: restoreState
+            clipboardRestoreState: restoreState,
+            pasteCommandPostedAt: pasteCommandPostedAt
         )
     }
 
