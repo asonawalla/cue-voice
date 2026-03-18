@@ -155,6 +155,10 @@ struct CueMainWindowView: View {
                 .foregroundStyle(CueTheme.slate)
             }
 
+            if let metrics = model.latencyMetrics {
+                latencyMetricsCard(metrics)
+            }
+
             secondarySectionCard(title: "Diagnostics", accessibilityID: CueAccessibilityID.diagnosticsSection) {
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
@@ -215,6 +219,32 @@ struct CueMainWindowView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func latencyMetricsCard(_ metrics: LatencyMetrics) -> some View {
+        secondarySectionCard(title: "Last Run") {
+            VStack(alignment: .leading, spacing: 6) {
+                latencyRow(label: "press → ack", value: metrics.pressToAck)
+                latencyRow(label: "release → life", value: metrics.releaseToProofOfLife)
+                latencyRow(label: "release → insert", value: metrics.releaseToInsert, emphasized: true)
+                Divider()
+                    .padding(.vertical, 2)
+                latencyRow(label: "transcription", value: metrics.transcriptionDuration)
+                latencyRow(label: "paste", value: metrics.pasteDuration)
+            }
+        }
+    }
+
+    private func latencyRow(label: String, value: TimeInterval, emphasized: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(CueTheme.slate)
+            Spacer(minLength: 8)
+            Text("\(Int(value * 1000))ms")
+                .font(.system(.caption2, design: .monospaced).weight(emphasized ? .semibold : .regular))
+                .foregroundStyle(emphasized ? CueTheme.ink : CueTheme.slate)
         }
     }
 

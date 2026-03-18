@@ -214,6 +214,13 @@ struct LatencyMetrics: Equatable {
     let totalDuration: TimeInterval
     let modelLoadDuration: TimeInterval
     let backendPipelineDuration: TimeInterval
+
+    /// Time from PTT key-down to first audible/visual ack (sound + icon change).
+    let pressToAck: TimeInterval
+    /// Time from PTT key-up to first sign Cue is working (stop sound + transcribing state).
+    let releaseToProofOfLife: TimeInterval
+    /// Time from PTT key-up to text inserted in target app. Excludes recording time.
+    let releaseToInsert: TimeInterval
 }
 
 @MainActor
