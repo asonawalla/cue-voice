@@ -20,9 +20,7 @@ final class CueSetupCoordinator {
         self.permissionService = permissionService
 
         self.transcriptionService.statusHandler = { [weak self] status in
-            self?.stateStore?.updateState { state in
-                state.setup.modelStatus = status
-            }
+            self?.stateStore?.apply(.modelStatusChanged(status))
         }
     }
 
@@ -37,14 +35,7 @@ final class CueSetupCoordinator {
     func refreshPermissions() {
         let snapshot = permissionService.currentPermissionSnapshot()
 
-        stateStore?.updateState { state in
-            state.setup.permissions = snapshot
-            state.setup.hasLoadedPermissions = true
-
-            if let cueError = state.currentFailure?.cueError, snapshot.resolves(cueError) {
-                state.session = .idle
-            }
-        }
+        stateStore?.apply(.permissionsRefreshed(snapshot))
     }
 
     func requestMicrophonePermission() async {
@@ -110,9 +101,7 @@ final class CueSetupCoordinator {
 
         guard !stateStore.state.isModelReady else {
             if stateStore.state.currentFailure?.cueError?.isModelPreparationRelated == true {
-                stateStore.updateState { state in
-                    state.session = .idle
-                }
+                stateStore.apply(.modelPreparationSucceeded)
             }
             return
         }
@@ -126,11 +115,7 @@ final class CueSetupCoordinator {
         do {
             try await transcriptionService.prepareModel()
 
-            stateStore.updateState { state in
-                if state.currentFailure?.cueError?.isModelPreparationRelated == true {
-                    state.session = .idle
-                }
-            }
+            stateStore.apply(.modelPreparationSucceeded)
         } catch {
             present(error)
         }
@@ -139,9 +124,7 @@ final class CueSetupCoordinator {
     private func present(_ error: Error) {
         let failure = CueFailure.from(error)
 
-        stateStore?.updateState { state in
-            state.session = .failed(failure)
-        }
+        stateStore?.apply(.failurePresented(failure))
 
         logger.error("\(failure.message, privacy: .public)")
     }

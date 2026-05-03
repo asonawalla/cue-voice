@@ -116,9 +116,7 @@ final class CueDictationCoordinator {
         do {
             try await transcriptionService.startRecording()
 
-            stateStore.updateState { updatedState in
-                updatedState.session = .recording
-            }
+            stateStore.apply(.recordingStarted)
         } catch {
             present(error)
         }
@@ -136,20 +134,14 @@ final class CueDictationCoordinator {
         currentRun?.proofOfLifeAt = Date()
         soundService.playRecordingStopped()
 
-        stateStore.updateState { state in
-            state.session = .transcribing
-            state.latencyMetrics = nil
-        }
+        stateStore.apply(.transcriptionStarted)
 
         do {
             let transcriptionStartedAt = Date()
             let result = try await transcriptionService.stopRecording()
             let transcriptionDuration = Date().timeIntervalSince(transcriptionStartedAt)
 
-            stateStore.updateState { state in
-                state.transcript = result.text
-                state.session = .pasting
-            }
+            stateStore.apply(.transcriptionCompleted(result))
 
             let insertionResult = try await insertionService.insert(result.text)
 
@@ -157,22 +149,19 @@ final class CueDictationCoordinator {
             let releaseToInsert = run?.releasedAt.map {
                 insertionResult.pasteCommandPostedAt.timeIntervalSince($0)
             } ?? 0
+            let metrics = LatencyMetrics(
+                recordingDuration: result.recordingDuration,
+                transcriptionDuration: transcriptionDuration,
+                pasteDuration: insertionResult.pasteDuration,
+                totalDuration: result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration,
+                modelLoadDuration: result.modelLoadDuration,
+                backendPipelineDuration: result.pipelineDuration,
+                pressToAck: run?.pressToAck ?? 0,
+                releaseToProofOfLife: run?.releaseToProofOfLife ?? 0,
+                releaseToInsert: releaseToInsert
+            )
 
-            stateStore.updateState { state in
-                state.lastInsertionResult = insertionResult
-                state.latencyMetrics = LatencyMetrics(
-                    recordingDuration: result.recordingDuration,
-                    transcriptionDuration: transcriptionDuration,
-                    pasteDuration: insertionResult.pasteDuration,
-                    totalDuration: result.recordingDuration + transcriptionDuration + insertionResult.pasteDuration,
-                    modelLoadDuration: result.modelLoadDuration,
-                    backendPipelineDuration: result.pipelineDuration,
-                    pressToAck: run?.pressToAck ?? 0,
-                    releaseToProofOfLife: run?.releaseToProofOfLife ?? 0,
-                    releaseToInsert: releaseToInsert
-                )
-                state.session = .idle
-            }
+            stateStore.apply(.insertionCompleted(insertionResult, metrics))
 
             logger.info(
                 "Completed transcription and insertion. press_to_ack=\((run?.pressToAck ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_life=\((run?.releaseToProofOfLife ?? 0) * 1000, format: .fixed(precision: 0))ms release_to_insert=\(releaseToInsert * 1000, format: .fixed(precision: 0))ms | record=\(result.recordingDuration, format: .fixed(precision: 2))s transcribe=\(transcriptionDuration, format: .fixed(precision: 2))s paste=\(insertionResult.pasteDuration, format: .fixed(precision: 2))s"
@@ -183,13 +172,7 @@ final class CueDictationCoordinator {
     }
 
     private func clearFailureForNewAttempt() {
-        stateStore?.updateState { state in
-            state.latencyMetrics = nil
-
-            if case .failed = state.session {
-                state.session = .idle
-            }
-        }
+        stateStore?.apply(.dictationAttemptStarted)
     }
 
     private func present(_ error: Error) {
@@ -199,9 +182,7 @@ final class CueDictationCoordinator {
             soundService.playError()
         }
 
-        stateStore?.updateState { state in
-            state.session = .failed(failure)
-        }
+        stateStore?.apply(.failurePresented(failure))
 
         logger.error("\(failure.message, privacy: .public)")
     }

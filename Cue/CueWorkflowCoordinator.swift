@@ -2,16 +2,8 @@ import Foundation
 
 @MainActor
 protocol CueStateStore: AnyObject {
-    var state: CueAppState { get set }
-}
-
-@MainActor
-extension CueStateStore {
-    func updateState(_ mutate: (inout CueAppState) -> Void) {
-        var updatedState = state
-        mutate(&updatedState)
-        state = updatedState
-    }
+    var state: CueAppState { get }
+    func apply(_ event: CueAppEvent)
 }
 
 @MainActor

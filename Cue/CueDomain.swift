@@ -331,6 +331,18 @@ struct CueSetupState: Equatable {
     var modelStatus: ModelPreparationStatus
 }
 
+enum CueAppEvent: Equatable {
+    case permissionsRefreshed(CuePermissionSnapshot)
+    case modelStatusChanged(ModelPreparationStatus)
+    case modelPreparationSucceeded
+    case dictationAttemptStarted
+    case recordingStarted
+    case transcriptionStarted
+    case transcriptionCompleted(CueTranscriptionResult)
+    case insertionCompleted(CueInsertionResult, LatencyMetrics)
+    case failurePresented(CueFailure)
+}
+
 struct CueAppState: Equatable {
     var setup: CueSetupState
     var session: CueSessionState
@@ -366,6 +378,44 @@ struct CueAppState: Equatable {
 
     var isModelReady: Bool {
         setup.modelStatus.isReady
+    }
+
+    mutating func apply(_ event: CueAppEvent) {
+        switch event {
+        case .permissionsRefreshed(let snapshot):
+            setup.permissions = snapshot
+            setup.hasLoadedPermissions = true
+
+            if let cueError = currentFailure?.cueError, snapshot.resolves(cueError) {
+                session = .idle
+            }
+        case .modelStatusChanged(let status):
+            setup.modelStatus = status
+        case .modelPreparationSucceeded:
+            if currentFailure?.cueError?.isModelPreparationRelated == true {
+                session = .idle
+            }
+        case .dictationAttemptStarted:
+            latencyMetrics = nil
+
+            if case .failed = session {
+                session = .idle
+            }
+        case .recordingStarted:
+            session = .recording
+        case .transcriptionStarted:
+            session = .transcribing
+            latencyMetrics = nil
+        case .transcriptionCompleted(let result):
+            transcript = result.text
+            session = .pasting
+        case .insertionCompleted(let result, let metrics):
+            lastInsertionResult = result
+            latencyMetrics = metrics
+            session = .idle
+        case .failurePresented(let failure):
+            session = .failed(failure)
+        }
     }
 }
 

@@ -127,6 +127,10 @@ final class CueAppModel: CueStateStore {
         state.session
     }
 
+    func apply(_ event: CueAppEvent) {
+        state.apply(event)
+    }
+
     func launch() async {
         await workflowCoordinator.launch()
     }
