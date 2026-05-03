@@ -88,7 +88,7 @@ struct CuePermissionSnapshot: Equatable {
     }
 }
 
-enum ModelPreparationStatus: Equatable {
+enum ModelPreparationStatus: Equatable, Sendable {
     case idle
     case checkingCache
     case downloading(progress: Double?)
@@ -134,7 +134,7 @@ enum ModelPreparationStatus: Equatable {
     }
 }
 
-struct CueTranscriptionResult: Equatable {
+struct CueTranscriptionResult: Equatable, Sendable {
     let text: String
     let language: String
     let recordingDuration: TimeInterval
@@ -185,7 +185,7 @@ protocol SoundService {
     func playError()
 }
 
-enum CueError: LocalizedError, Equatable {
+enum CueError: LocalizedError, Equatable, Sendable {
     case busy
     case microphonePermissionDenied
     case accessibilityPermissionDenied

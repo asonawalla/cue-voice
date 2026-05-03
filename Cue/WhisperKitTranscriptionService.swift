@@ -3,19 +3,87 @@ import CoreML
 import WhisperKit
 import os
 
-@MainActor
-protocol TranscriptionService: AnyObject {
-    var statusHandler: ((ModelPreparationStatus) -> Void)? { get set }
+typealias TranscriptionStatusHandler = @MainActor @Sendable (ModelPreparationStatus) -> Void
+
+nonisolated protocol TranscriptionService: AnyObject {
+    @MainActor var statusHandler: TranscriptionStatusHandler? { get set }
 
     func prepareModel() async throws
     func startRecording() async throws
     func stopRecording() async throws -> CueTranscriptionResult
 }
 
-@MainActor
-final class WhisperKitTranscriptionService: TranscriptionService {
-    var statusHandler: ((ModelPreparationStatus) -> Void)?
+nonisolated final class WhisperKitTranscriptionService: TranscriptionService {
+    @MainActor var statusHandler: TranscriptionStatusHandler?
 
+    private let backend: WhisperKitTranscriptionBackend
+
+    @MainActor
+    init(
+        fileManager: FileManager = .default,
+        defaults: UserDefaults = .standard,
+        clientFactory: WhisperKitClientFactory? = nil,
+        debugCaptureStore: (any DebugCaptureStoring)? = nil
+    ) {
+        backend = WhisperKitTranscriptionBackend(
+            fileManager: fileManager,
+            defaults: defaults,
+            clientFactory: clientFactory ?? LiveWhisperKitClientFactory(),
+            debugCaptureStore: debugCaptureStore
+                ?? DebugCaptureStore(
+                    fileManager: fileManager,
+                    rootDirectory: CueAppConfiguration.debugCaptureRootDirectory(fileManager: fileManager)
+                )
+        )
+    }
+
+    func prepareModel() async throws {
+        let statusHandler: TranscriptionStatusHandler? = await MainActor.run { self.statusHandler }
+        try await backend.prepareModel(statusHandler: statusHandler)
+    }
+
+    func startRecording() async throws {
+        let statusHandler: TranscriptionStatusHandler? = await MainActor.run { self.statusHandler }
+        try await backend.startRecording(statusHandler: statusHandler)
+    }
+
+    func stopRecording() async throws -> CueTranscriptionResult {
+        try await backend.stopRecording()
+    }
+}
+
+@MainActor
+private final class ModelPreparationStatusReporter {
+    private let statusHandler: TranscriptionStatusHandler?
+    private var acceptsDownloadProgress = false
+
+    init(statusHandler: TranscriptionStatusHandler?) {
+        self.statusHandler = statusHandler
+    }
+
+    func report(_ status: ModelPreparationStatus) {
+        statusHandler?(status)
+    }
+
+    func beginDownload() {
+        acceptsDownloadProgress = true
+        report(.downloading(progress: nil))
+    }
+
+    func finishDownload() {
+        acceptsDownloadProgress = false
+    }
+
+    func reportDownloadProgress(_ progress: Double) {
+        guard acceptsDownloadProgress else {
+            return
+        }
+
+        report(.downloading(progress: progress))
+    }
+}
+
+private actor WhisperKitTranscriptionBackend {
     private static let ignoredTranscriptSentinels: Set<String> = [
         "[BLANK_AUDIO]"
     ]
@@ -32,51 +100,55 @@ final class WhisperKitTranscriptionService: TranscriptionService {
     init(
         fileManager: FileManager = .default,
         defaults: UserDefaults = .standard,
-        clientFactory: WhisperKitClientFactory? = nil,
-        debugCaptureStore: (any DebugCaptureStoring)? = nil
+        clientFactory: any WhisperKitClientFactory,
+        debugCaptureStore: any DebugCaptureStoring
     ) {
         self.fileManager = fileManager
         self.defaults = defaults
-        self.clientFactory = clientFactory ?? LiveWhisperKitClientFactory()
+        self.clientFactory = clientFactory
         self.debugCaptureStore = debugCaptureStore
-            ?? DebugCaptureStore(
-                fileManager: fileManager,
-                rootDirectory: CueAppConfiguration.debugCaptureRootDirectory(fileManager: fileManager)
-            )
     }
 
-    func prepareModel() async throws {
+    func prepareModel(statusHandler: TranscriptionStatusHandler?) async throws {
+        let statusReporter = await MainActor.run {
+            ModelPreparationStatusReporter(statusHandler: statusHandler)
+        }
+
         if whisperKitClient != nil {
-            statusHandler?(.ready)
+            await statusReporter.report(.ready)
             return
         }
 
         let modelDirectory = CueAppConfiguration.modelDownloadDirectory(fileManager: fileManager)
         try fileManager.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
 
-        statusHandler?(.checkingCache)
+        await statusReporter.report(.checkingCache)
 
         let modelFolder: URL
         if let cachedModelFolder = cachedModelFolder(), fileManager.fileExists(atPath: cachedModelFolder.path) {
             modelFolder = cachedModelFolder
         } else {
-            statusHandler?(.downloading(progress: nil))
+            await statusReporter.beginDownload()
             do {
                 modelFolder = try await clientFactory.downloadModel(
                     variant: CueAppConfiguration.modelID,
                     downloadBase: modelDirectory
-                ) { [weak self] progress in
-                    self?.statusHandler?(.downloading(progress: progress))
+                ) { progress in
+                    Task { @MainActor in
+                        statusReporter.reportDownloadProgress(progress)
+                    }
                 }
+                await statusReporter.finishDownload()
             } catch {
-                statusHandler?(.failed("Model download failed"))
+                await statusReporter.finishDownload()
+                await statusReporter.report(.failed("Model download failed"))
                 throw CueError.modelDownloadFailed(error.localizedDescription)
             }
 
             defaults.set(modelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
         }
 
-        statusHandler?(.loading)
+        await statusReporter.report(.loading)
 
         do {
             whisperKitClient = try await clientFactory.makeClient(
@@ -85,20 +157,20 @@ final class WhisperKitTranscriptionService: TranscriptionService {
                 modelFolder: modelFolder
             )
         } catch {
-            statusHandler?(.failed("Model load failed"))
+            await statusReporter.report(.failed("Model load failed"))
             throw CueError.modelLoadFailed(error.localizedDescription)
         }
 
-        statusHandler?(.ready)
+        await statusReporter.report(.ready)
         logger.info("WhisperKit model \(CueAppConfiguration.modelID, privacy: .public) ready from \(modelFolder.path, privacy: .public)")
     }
 
-    func startRecording() async throws {
+    func startRecording(statusHandler: TranscriptionStatusHandler?) async throws {
         guard recordingStartedAt == nil else {
             throw CueError.recordingAlreadyInProgress
         }
 
-        try await prepareModel()
+        try await prepareModel(statusHandler: statusHandler)
 
         guard let whisperKitClient else {
             throw CueError.transcriptionFailed("The WhisperKit pipeline was not available.")
@@ -276,7 +348,7 @@ final class WhisperKitTranscriptionService: TranscriptionService {
     }
 }
 
-protocol WhisperKitClientFactory {
+nonisolated protocol WhisperKitClientFactory {
     func downloadModel(
         variant: String,
         downloadBase: URL,
@@ -290,7 +362,7 @@ protocol WhisperKitClientFactory {
     ) async throws -> any WhisperKitClient
 }
 
-protocol WhisperKitClient: AnyObject {
+nonisolated protocol WhisperKitClient: AnyObject {
     var audioSamples: [Float] { get }
 
     func startRecording() throws
@@ -305,7 +377,7 @@ struct WhisperKitTranscriptionSegment: Equatable, Sendable {
     let pipelineDuration: TimeInterval
 }
 
-private final class LiveWhisperKitClientFactory: WhisperKitClientFactory {
+private nonisolated final class LiveWhisperKitClientFactory: WhisperKitClientFactory {
     func downloadModel(
         variant: String,
         downloadBase: URL,
@@ -339,7 +411,7 @@ private final class LiveWhisperKitClientFactory: WhisperKitClientFactory {
     }
 }
 
-private final class LiveWhisperKitClient: WhisperKitClient {
+private nonisolated final class LiveWhisperKitClient: WhisperKitClient {
     private let whisperKit: WhisperKit
 
     init(whisperKit: WhisperKit) {

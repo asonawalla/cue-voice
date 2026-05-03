@@ -44,6 +44,30 @@ struct WhisperKitTranscriptionServiceTests {
         #expect(defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == modelFolder.path)
     }
 
+    @Test func prepareModelIgnoresProgressCallbacksAfterDownloadFinishes() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let modelFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
+        factory.progressToReportDuringDownload = nil
+        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        var statuses: [ModelPreparationStatus] = []
+        service.statusHandler = { statuses.append($0) }
+
+        try await service.prepareModel()
+
+        let terminalStatuses = statuses
+        #expect(terminalStatuses == [.checkingCache, .downloading(progress: nil), .loading, .ready])
+
+        factory.capturedProgressHandler?(0.75)
+        try await Task.sleep(nanoseconds: 10_000_000)
+
+        #expect(statuses == terminalStatuses)
+    }
+
     @Test func prepareModelIgnoresCachedPathForPreviousModelVariant() async throws {
         let suiteName = UUID().uuidString
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -310,6 +334,8 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
     var downloadError: Error?
     var makeClientError: Error?
     var client: FakeWhisperKitClient
+    var progressToReportDuringDownload: Double? = 0.5
+    var capturedProgressHandler: ((Double) -> Void)?
 
     init(downloadResult: URL, client: FakeWhisperKitClient = FakeWhisperKitClient()) {
         self.downloadResult = downloadResult
@@ -324,7 +350,11 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
         _ = downloadBase
         downloadCallCount += 1
         downloadedVariants.append(variant)
-        onProgress(0.5)
+        capturedProgressHandler = onProgress
+
+        if let progressToReportDuringDownload {
+            onProgress(progressToReportDuringDownload)
+        }
 
         if let downloadError {
             throw downloadError

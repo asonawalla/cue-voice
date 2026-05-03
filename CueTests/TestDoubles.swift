@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class FakeTranscriptionService: TranscriptionService {
-    var statusHandler: ((ModelPreparationStatus) -> Void)?
+    var statusHandler: TranscriptionStatusHandler?
 
     var prepareCallCount = 0
     var startRecordingCallCount = 0
@@ -19,6 +19,7 @@ final class FakeTranscriptionService: TranscriptionService {
         pipelineDuration: 0.5
     )
 
+    @MainActor
     func prepareModel() async throws {
         prepareCallCount += 1
 
@@ -29,6 +30,7 @@ final class FakeTranscriptionService: TranscriptionService {
         statusHandler?(.ready)
     }
 
+    @MainActor
     func startRecording() async throws {
         startRecordingCallCount += 1
 
@@ -37,6 +39,7 @@ final class FakeTranscriptionService: TranscriptionService {
         }
     }
 
+    @MainActor
     func stopRecording() async throws -> CueTranscriptionResult {
         stopRecordingCallCount += 1
 

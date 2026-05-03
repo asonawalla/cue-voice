@@ -58,10 +58,10 @@ private final class UITestPermissionService: PermissionService {
 
 @MainActor
 private final class UITestTranscriptionService: TranscriptionService {
-    var statusHandler: ((ModelPreparationStatus) -> Void)?
+    var statusHandler: TranscriptionStatusHandler?
 
     func prepareModel() async throws {
-        statusHandler?(.ready)
+        await statusHandler?(.ready)
     }
 
     func startRecording() async throws {}
