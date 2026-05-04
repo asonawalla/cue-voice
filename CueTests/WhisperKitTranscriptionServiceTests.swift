@@ -208,6 +208,93 @@ struct WhisperKitTranscriptionServiceTests {
         }
     }
 
+    @Test func debugCaptureStoreUsesInjectedDateUUIDAndTimeZoneForCapturePath() async throws {
+        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: captureRoot) }
+
+        let timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let fixedDate = try #require(DateComponents(
+            calendar: Calendar(identifier: .iso8601),
+            timeZone: timeZone,
+            year: 2026,
+            month: 5,
+            day: 4,
+            hour: 12,
+            minute: 34,
+            second: 56,
+            nanosecond: 789_000_000
+        ).date)
+        let fixedUUID = try #require(UUID(uuidString: "12345678-1234-5678-1234-567812345678"))
+        let store = DebugCaptureStore(
+            rootDirectory: captureRoot,
+            dateProvider: { fixedDate },
+            uuidProvider: { fixedUUID },
+            timeZone: timeZone
+        )
+
+        let capture = try await store.createCapture(audioSamples: [0], recordingDuration: 1.0)
+
+        let expectedCaptureID = "2026-05-04T12-34-56.789Z-12345678-1234-5678-1234-567812345678"
+        #expect(capture.captureID == expectedCaptureID)
+        #expect(capture.directoryURL.lastPathComponent == expectedCaptureID)
+        #expect(capture.directoryURL.deletingLastPathComponent().lastPathComponent == "2026-05-04")
+        #expect(FileManager.default.fileExists(atPath: capture.directoryURL.appendingPathComponent("clip.wav").path))
+    }
+
+    @Test func debugCaptureStoreWritesTypedResultJSON() async throws {
+        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: captureRoot) }
+
+        let store = DebugCaptureStore(rootDirectory: captureRoot)
+        let capture = try await store.createCapture(audioSamples: [0], recordingDuration: 1.0)
+
+        try await store.saveResult(
+            for: capture,
+            sampleCount: 1,
+            recordingDuration: 1.5,
+            segments: [
+                WhisperKitTranscriptionSegment(
+                    text: "hello",
+                    language: "en",
+                    modelLoadDuration: 0.25,
+                    pipelineDuration: 0.5
+                )
+            ],
+            finalTranscript: "hello",
+            errorMessage: nil
+        )
+
+        let resultData = try Data(contentsOf: capture.directoryURL.appendingPathComponent("result.json"))
+        let document = try JSONDecoder().decode(DebugCaptureResultDocument.self, from: resultData)
+
+        #expect(document.captureID == capture.captureID)
+        #expect(document.sampleCount == 1)
+        #expect(document.recordingDuration == 1.5)
+        #expect(document.finalTranscript == "hello")
+        #expect(document.errorMessage == nil)
+        #expect(document.rawSegments == [
+            DebugCaptureResultSegment(
+                text: "hello",
+                language: "en",
+                modelLoadDuration: 0.25,
+                pipelineDuration: 0.5
+            )
+        ])
+    }
+
+    @Test func debugCaptureStoreUsesInjectedSampleRateInWAVHeader() async throws {
+        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: captureRoot) }
+
+        let store = DebugCaptureStore(rootDirectory: captureRoot, sampleRate: 22_050)
+
+        let capture = try await store.createCapture(audioSamples: [0, 0.5], recordingDuration: 1.0)
+        let wavData = try Data(contentsOf: capture.directoryURL.appendingPathComponent("clip.wav"))
+
+        #expect(littleEndianUInt32(in: wavData, at: 24) == 22_050)
+        #expect(littleEndianUInt32(in: wavData, at: 28) == 44_100)
+    }
+
     @Test func stopRecordingSavesDebugCaptureArtifactsWhenEnabled() async throws {
         let suiteName = UUID().uuidString
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -447,4 +534,14 @@ private func firstDirectory(at url: URL) throws -> URL? {
         options: [.skipsHiddenFiles]
     )
     return entries.first
+}
+
+private func littleEndianUInt32(in data: Data, at offset: Int) -> UInt32 {
+    precondition(offset + 4 <= data.count)
+
+    var value: UInt32 = 0
+    for byteOffset in 0..<4 {
+        value |= UInt32(data[offset + byteOffset]) << UInt32(byteOffset * 8)
+    }
+    return value
 }

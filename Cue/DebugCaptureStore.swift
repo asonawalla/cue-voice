@@ -34,34 +34,49 @@ struct DebugCaptureResultSegment: Codable, Equatable, Sendable {
     let pipelineDuration: TimeInterval
 }
 
-final class DebugCaptureStore: DebugCaptureStoring, @unchecked Sendable {
+actor DebugCaptureStore: DebugCaptureStoring {
     private let fileManager: FileManager
     private let rootDirectory: URL
+    private let dateProvider: @Sendable () -> Date
+    private let uuidProvider: @Sendable () -> UUID
+    private let timeZone: TimeZone
+    private let sampleRate: Int
 
     init(
         fileManager: FileManager = .default,
-        rootDirectory: URL
+        rootDirectory: URL,
+        dateProvider: @escaping @Sendable () -> Date = Date.init,
+        uuidProvider: @escaping @Sendable () -> UUID = UUID.init,
+        timeZone: TimeZone = .current,
+        sampleRate: Int = WhisperKit.sampleRate
     ) {
         self.fileManager = fileManager
         self.rootDirectory = rootDirectory
+        self.dateProvider = dateProvider
+        self.uuidProvider = uuidProvider
+        self.timeZone = timeZone
+        self.sampleRate = sampleRate
     }
 
     func createCapture(audioSamples: [Float], recordingDuration: TimeInterval) async throws -> DebugCaptureHandle {
         _ = recordingDuration
-        let fileManager = self.fileManager
-        let rootDirectory = self.rootDirectory
+        let now = dateProvider()
+        let dayDirectory = rootDirectory.appendingPathComponent(
+            Self.dayFolderName(for: now, timeZone: timeZone),
+            isDirectory: true
+        )
+        let captureID = Self.makeCaptureID(
+            from: now,
+            uuid: uuidProvider(),
+            timeZone: timeZone
+        )
+        let captureDirectory = dayDirectory.appendingPathComponent(captureID, isDirectory: true)
 
-        return try await Task.detached(priority: .utility) {
-            let now = Date()
-            let dayDirectory = rootDirectory.appendingPathComponent(Self.dayFolderName(for: now), isDirectory: true)
-            let captureID = Self.makeCaptureID(from: now)
-            let captureDirectory = dayDirectory.appendingPathComponent(captureID, isDirectory: true)
+        try fileManager.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
+        try Self.wavData(from: audioSamples, sampleRate: sampleRate)
+            .write(to: captureDirectory.appendingPathComponent("clip.wav"))
 
-            try fileManager.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
-            try Self.wavData(from: audioSamples).write(to: captureDirectory.appendingPathComponent("clip.wav"))
-
-            return DebugCaptureHandle(captureID: captureID, directoryURL: captureDirectory)
-        }.value
+        return DebugCaptureHandle(captureID: captureID, directoryURL: captureDirectory)
     }
 
     func saveResult(
@@ -89,46 +104,30 @@ final class DebugCaptureStore: DebugCaptureStoring, @unchecked Sendable {
         )
 
         let resultURL = capture.directoryURL.appendingPathComponent("result.json")
-        try await Task.detached(priority: .utility) {
-            let jsonObject: [String: Any] = [
-                "captureID": result.captureID,
-                "sampleCount": result.sampleCount,
-                "recordingDuration": result.recordingDuration,
-                "rawSegments": result.rawSegments.map {
-                    [
-                        "text": $0.text,
-                        "language": $0.language as Any,
-                        "modelLoadDuration": $0.modelLoadDuration,
-                        "pipelineDuration": $0.pipelineDuration
-                    ]
-                },
-                "finalTranscript": result.finalTranscript,
-                "errorMessage": result.errorMessage as Any
-            ]
-
-            let data = try JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: resultURL)
-        }.value
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(result)
+        try data.write(to: resultURL)
     }
 
-    nonisolated private static func makeCaptureID(from date: Date) -> String {
+    nonisolated private static func makeCaptureID(from date: Date, uuid: UUID, timeZone: TimeZone) -> String {
         let timestampFormatter = ISO8601DateFormatter()
-        timestampFormatter.timeZone = TimeZone.current
+        timestampFormatter.timeZone = timeZone
         timestampFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let timestamp = timestampFormatter.string(from: date).replacingOccurrences(of: ":", with: "-")
-        return "\(timestamp)-\(UUID().uuidString.lowercased())"
+        return "\(timestamp)-\(uuid.uuidString.lowercased())"
     }
 
-    nonisolated private static func dayFolderName(for date: Date) -> String {
+    nonisolated private static func dayFolderName(for date: Date, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .iso8601)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone.current
+        formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
 
-    nonisolated private static func wavData(from audioSamples: [Float]) throws -> Data {
+    nonisolated private static func wavData(from audioSamples: [Float], sampleRate: Int) throws -> Data {
         let bytesPerSample = 2
         let dataChunkSize = audioSamples.count * bytesPerSample
         guard dataChunkSize <= Int(UInt32.max) - 36 else {
@@ -150,8 +149,8 @@ final class DebugCaptureStore: DebugCaptureStoring, @unchecked Sendable {
         appendLittleEndian(UInt32(16))
         appendLittleEndian(UInt16(1))
         appendLittleEndian(UInt16(1))
-        appendLittleEndian(UInt32(WhisperKit.sampleRate))
-        appendLittleEndian(UInt32(WhisperKit.sampleRate * bytesPerSample))
+        appendLittleEndian(UInt32(sampleRate))
+        appendLittleEndian(UInt32(sampleRate * bytesPerSample))
         appendLittleEndian(UInt16(bytesPerSample))
         appendLittleEndian(UInt16(16))
         data.append(contentsOf: Array("data".utf8))
