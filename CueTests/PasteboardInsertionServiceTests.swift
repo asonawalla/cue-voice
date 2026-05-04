@@ -111,6 +111,37 @@ struct PasteboardInsertionServiceTests {
         #expect(pasteboard.currentPlainText == "before")
     }
 
+    @Test func cuePosterFailurePreservesCueErrorMessageAndRestoresClipboard() async throws {
+        let resolver = FakeFrontmostApplicationResolver(
+            application: CueRunningApplication(
+                processIdentifier: 10,
+                localizedName: "Notes",
+                bundleIdentifier: "com.apple.Notes"
+            )
+        )
+        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
+        let poster = FakePasteCommandPoster()
+        poster.error = CueError.pasteFailed("Cue could not synthesize the Command-V keyboard events.")
+        let service = PasteboardInsertionService(
+            applicationResolver: resolver,
+            pasteboard: pasteboard,
+            pasteCommandPoster: poster,
+            hasAccessibilityPermission: { true },
+            mainBundleIdentifier: "dev.sonawalla.Cue",
+            pasteRestoreGracePeriod: 0,
+            sleepAfterPaste: noOpSleep
+        )
+
+        await #expect(throws: CueError.pasteFailed("Cue could not synthesize the Command-V keyboard events.")) {
+            _ = try await service.insert("hello")
+        }
+
+        #expect(poster.postedProcessIdentifiers == [10])
+        #expect(pasteboard.writtenStrings == ["hello"])
+        #expect(pasteboard.restoreContentsCallCount == 1)
+        #expect(pasteboard.currentPlainText == "before")
+    }
+
     @Test func readyTargetPostsPasteCommandAndRestoresClipboard() async throws {
         let resolver = FakeFrontmostApplicationResolver(
             application: CueRunningApplication(

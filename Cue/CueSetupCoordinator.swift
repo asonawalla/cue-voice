@@ -126,6 +126,6 @@ final class CueSetupCoordinator {
 
         stateStore?.apply(.failurePresented(failure))
 
-        logger.error("\(failure.message, privacy: .public)")
+        logger.error("\(CueCopy.failureMessage(failure), privacy: .public)")
     }
 }

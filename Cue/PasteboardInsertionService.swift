@@ -134,8 +134,9 @@ final class PasteboardInsertionService: TextInsertionService {
         do {
             try pasteCommandPoster.postPasteCommand(to: targetApplication.processIdentifier)
         } catch {
+            let message = CueCopy.errorMessage(for: error)
             logger.error(
-                "Failed to send paste command to \(targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "unknown app", privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Failed to send paste command to \(targetApplication.localizedName ?? targetApplication.bundleIdentifier ?? "unknown app", privacy: .public): \(message, privacy: .public)"
             )
 
             let restoreState = restoreClipboardIfOwned(
@@ -149,7 +150,11 @@ final class PasteboardInsertionService: TextInsertionService {
                 context: "paste command failure"
             )
 
-            throw CueError.pasteFailed(error.localizedDescription)
+            if let cueError = error as? CueError {
+                throw cueError
+            }
+
+            throw CueError.pasteFailed(message)
         }
 
         let pasteCommandPostedAt = Date()

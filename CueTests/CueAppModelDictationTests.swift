@@ -68,7 +68,7 @@ struct CueAppModelDictationTests {
 
         await model.launch()
 
-        #expect(model.errorMessage == "Cue could not prepare the base.en model: offline")
+        #expect(model.errorMessage == "Cue could not prepare the small.en model: offline")
         #expect(insertionService.insertCallCount == 0)
         #expect(soundService.playErrorCallCount == 0)
     }

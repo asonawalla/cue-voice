@@ -38,7 +38,7 @@ final class SystemPermissionService: PermissionService {
         }
 
         let currentState = microphonePermissionState
-        logger.info("Microphone permission result: \(currentState.title, privacy: .public)")
+        logger.info("Microphone permission result: \(CueCopy.permissionStateTitle(currentState), privacy: .public)")
         return currentState
     }
 
@@ -51,17 +51,17 @@ final class SystemPermissionService: PermissionService {
         let openedDirectPane = permission.settingsURL.flatMap(workspace.open) ?? false
 
         if openedDirectPane {
-            logger.info("Opened System Settings for \(permission.title, privacy: .public)")
+            logger.info("Opened System Settings for \(CueCopy.permissionTitle(permission), privacy: .public)")
             return
         }
 
         let fallbackURL = URL(fileURLWithPath: "/System/Applications/System Settings.app", isDirectory: true)
         if workspace.open(fallbackURL) {
-            logger.info("Opened System Settings app fallback for \(permission.title, privacy: .public)")
+            logger.info("Opened System Settings app fallback for \(CueCopy.permissionTitle(permission), privacy: .public)")
             return
         }
 
-        logger.error("Failed to open System Settings for \(permission.title, privacy: .public)")
+        logger.error("Failed to open System Settings for \(CueCopy.permissionTitle(permission), privacy: .public)")
     }
 
     private var microphonePermissionState: CuePermissionState {

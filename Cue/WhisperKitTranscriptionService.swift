@@ -253,7 +253,7 @@ private actor WhisperKitTranscriptionBackend {
             recordingDuration: recordingDuration,
             segments: results,
             finalTranscript: transcript,
-            errorMessage: transcriptError?.errorDescription
+            errorMessage: transcriptError.map(CueCopy.errorMessage(for:))
         )
 
         if let transcriptError {

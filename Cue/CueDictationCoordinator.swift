@@ -57,7 +57,7 @@ final class CueDictationCoordinator {
         }
 
         guard state.isModelReady else {
-            logger.info("Ignoring push-to-talk press while model status is \(state.setup.modelStatus.title, privacy: .public)")
+            logger.info("Ignoring push-to-talk press while model status is \(CueCopy.modelPreparationStatusTitle(state.setup.modelStatus), privacy: .public)")
             await setupCoordinator.warmModel()
             return
         }
@@ -184,7 +184,7 @@ final class CueDictationCoordinator {
 
         stateStore?.apply(.failurePresented(failure))
 
-        logger.error("\(failure.message, privacy: .public)")
+        logger.error("\(CueCopy.failureMessage(failure), privacy: .public)")
     }
 }
 

@@ -100,7 +100,7 @@ struct CueAppPresentation: Equatable {
 
             return "Ready"
         default:
-            return state.session.title
+            return CueCopy.sessionTitle(state.session)
         }
     }
 
@@ -110,7 +110,7 @@ struct CueAppPresentation: Equatable {
         }
 
         guard state.setup.permissions.isFullyConfigured else {
-            return state.setup.permissions.setupSummary
+            return CueCopy.permissionSetupSummary(state.setup.permissions)
         }
 
         switch state.session {
@@ -121,10 +121,10 @@ struct CueAppPresentation: Equatable {
         case .pasting:
             return "Cue is sending the latest transcript to the frontmost app."
         case .failed(let failure):
-            return failure.message
+            return CueCopy.failureMessage(failure)
         case .idle:
             guard state.isModelReady else {
-                return state.setup.modelStatus.title
+                return CueCopy.modelPreparationStatusTitle(state.setup.modelStatus)
             }
 
             return nil

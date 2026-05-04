@@ -46,7 +46,7 @@ struct CueAppModelPermissionTests {
         await model.handlePushToTalkPressed()
 
         #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.errorMessage == CueError.microphonePermissionDenied.errorDescription)
+        #expect(model.errorMessage == CueCopy.errorMessage(for: CueError.microphonePermissionDenied))
     }
 
     @Test func pushToTalkWithoutAccessibilityShowsError() async throws {
@@ -66,7 +66,7 @@ struct CueAppModelPermissionTests {
         await model.handlePushToTalkPressed()
 
         #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.errorMessage == CueError.accessibilityPermissionDenied.errorDescription)
+        #expect(model.errorMessage == CueCopy.errorMessage(for: CueError.accessibilityPermissionDenied))
     }
 
     @Test func refreshPermissionsKeepsAccessibilityFailureUntilAccessibilityIsGranted() async throws {

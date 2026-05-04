@@ -80,7 +80,7 @@ final class CueAppModel: CueStateStore {
     }
 
     var errorMessage: String? {
-        state.currentFailure?.message
+        state.currentFailure.map(CueCopy.failureMessage)
     }
 
     var latencyMetrics: LatencyMetrics? {
