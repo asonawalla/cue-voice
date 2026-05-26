@@ -360,6 +360,107 @@
       }
     }
 
+    @media (max-width: 700px) {
+      body::before {
+        background-size: 100% 18px;
+        opacity: 0.72;
+      }
+
+      .stage {
+        min-height: 100svh;
+      }
+
+      .compose {
+        top: 18px;
+        left: 12px;
+        width: calc(100vw + 190px);
+        min-width: 560px;
+        height: calc(100svh - 34px);
+        min-height: 630px;
+        border-radius: 18px;
+        transform: rotate(-1.05deg);
+        transform-origin: 20% 14%;
+      }
+
+      .toolbar {
+        grid-template-columns: 76px minmax(120px, 1fr) 50px;
+        height: 54px;
+        padding: 0 15px;
+      }
+
+      .traffic {
+        gap: 7px;
+      }
+
+      .dot {
+        width: 11px;
+        height: 11px;
+      }
+
+      .toolbar-title {
+        font-size: 13px;
+      }
+
+      .tools {
+        gap: 0;
+      }
+
+      .tools .tool:not(.send) {
+        display: none;
+      }
+
+      .tool {
+        width: 30px;
+        height: 26px;
+        border-radius: 7px;
+      }
+
+      .fields {
+        padding: 8px 28px 0;
+      }
+
+      .row {
+        grid-template-columns: 58px minmax(0, 1fr);
+        min-height: 34px;
+      }
+
+      .label {
+        font-size: 14px;
+      }
+
+      .value {
+        overflow: hidden;
+        font-size: 15px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .body {
+        padding: 32px 30px 54px;
+      }
+
+      .dictation {
+        max-width: calc(100vw - 56px);
+        min-height: 384px;
+        font-size: 31px;
+        line-height: 1.08;
+      }
+
+      .sentence.is-lead {
+        margin-bottom: 0.78em;
+      }
+
+      .sentence.is-paragraph {
+        margin-top: 0.78em;
+      }
+
+      .quiet-rule {
+        width: 270px;
+        max-width: calc(100vw - 78px);
+        margin-top: 30px;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
