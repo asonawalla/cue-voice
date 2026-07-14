@@ -16,8 +16,7 @@ extension KeyboardShortcuts.Name {
 protocol HotkeyBindingService: AnyObject {
     func currentShortcut() -> KeyboardShortcuts.Shortcut?
     func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?)
-    func registerKeyDown(_ action: @escaping () -> Void)
-    func registerKeyUp(_ action: @escaping () -> Void)
+    func events() -> AsyncStream<KeyboardShortcuts.EventType>
 }
 
 final class LiveHotkeyBindingService: HotkeyBindingService {
@@ -29,49 +28,18 @@ final class LiveHotkeyBindingService: HotkeyBindingService {
         KeyboardShortcuts.setShortcut(shortcut, for: .pushToTalk)
     }
 
-    func registerKeyDown(_ action: @escaping () -> Void) {
-        KeyboardShortcuts.onKeyDown(for: .pushToTalk, action: action)
-    }
-
-    func registerKeyUp(_ action: @escaping () -> Void) {
-        KeyboardShortcuts.onKeyUp(for: .pushToTalk, action: action)
-    }
-}
-
-final class DisabledHotkeyBindingService: HotkeyBindingService {
-    private var shortcut: KeyboardShortcuts.Shortcut?
-
-    init(shortcut: KeyboardShortcuts.Shortcut? = defaultPushToTalkShortcut) {
-        self.shortcut = shortcut
-    }
-
-    func currentShortcut() -> KeyboardShortcuts.Shortcut? {
-        shortcut
-    }
-
-    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
-        self.shortcut = shortcut
-    }
-
-    func registerKeyDown(_ action: @escaping () -> Void) {
-        _ = action
-    }
-
-    func registerKeyUp(_ action: @escaping () -> Void) {
-        _ = action
+    func events() -> AsyncStream<KeyboardShortcuts.EventType> {
+        KeyboardShortcuts.events(for: .pushToTalk)
     }
 }
 
 @MainActor
 @Observable
 final class CueHotkeyManager {
-    var shortcutSummary: String
-    var hasConfiguredShortcut: Bool
+    private(set) var shortcut: KeyboardShortcuts.Shortcut?
 
-    private weak var appModel: CueAppModel?
-    private let defaults: UserDefaults
-    private let bindingService: HotkeyBindingService
     private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Hotkey")
+    private let eventTask: Task<Void, Never>
 
     private static let initializationFlagKey = "Cue.pushToTalkShortcutInitialized"
 
@@ -80,42 +48,45 @@ final class CueHotkeyManager {
         defaults: UserDefaults = .standard,
         bindingService: HotkeyBindingService? = nil
     ) {
-        self.appModel = appModel
-        self.defaults = defaults
-        self.bindingService = bindingService ?? LiveHotkeyBindingService()
-        shortcutSummary = "Not configured"
-        hasConfiguredShortcut = false
+        let bindingService = bindingService ?? LiveHotkeyBindingService()
+        shortcut = nil
 
-        initializeShortcutIfNeeded()
+        let events = bindingService.events()
+        eventTask = Task { @MainActor [weak appModel] in
+            for await event in events {
+                guard let appModel else {
+                    return
+                }
 
-        let currentShortcut = self.bindingService.currentShortcut()
-        shortcutSummary = Self.describe(currentShortcut)
-        hasConfiguredShortcut = currentShortcut != nil
-
-        self.bindingService.registerKeyDown { [weak self] in
-            guard let self, let appModel = self.appModel else {
-                return
-            }
-
-            Task {
-                await appModel.handlePushToTalkPressed()
-            }
-        }
-
-        self.bindingService.registerKeyUp { [weak self] in
-            guard let self, let appModel = self.appModel else {
-                return
-            }
-
-            Task {
-                await appModel.handlePushToTalkReleased()
+                switch event {
+                case .keyDown:
+                    appModel.handlePushToTalkPressed()
+                case .keyUp:
+                    appModel.handlePushToTalkReleased()
+                @unknown default:
+                    continue
+                }
             }
         }
+
+        initializeShortcutIfNeeded(defaults: defaults, bindingService: bindingService)
+        shortcut = bindingService.currentShortcut()
+    }
+
+    deinit {
+        eventTask.cancel()
+    }
+
+    var shortcutSummary: String {
+        Self.describe(shortcut)
+    }
+
+    var hasConfiguredShortcut: Bool {
+        shortcut != nil
     }
 
     func updateShortcutSummary(_ shortcut: KeyboardShortcuts.Shortcut?) {
-        shortcutSummary = Self.describe(shortcut)
-        hasConfiguredShortcut = shortcut != nil
+        self.shortcut = shortcut
         logger.info("Push-to-talk shortcut updated to \(self.shortcutSummary, privacy: .public)")
     }
 
@@ -123,7 +94,10 @@ final class CueHotkeyManager {
         shortcut?.description ?? "Not configured"
     }
 
-    private func initializeShortcutIfNeeded() {
+    private func initializeShortcutIfNeeded(
+        defaults: UserDefaults,
+        bindingService: HotkeyBindingService
+    ) {
         guard !defaults.bool(forKey: Self.initializationFlagKey) else {
             return
         }

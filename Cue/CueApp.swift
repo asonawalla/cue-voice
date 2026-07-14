@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let cueMainWindowID = "cue.main-window"
+
 @main
 struct CueApp: App {
     @State private var model: CueAppModel
@@ -27,7 +29,7 @@ struct CueApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        Window("Cue", id: CueSceneID.mainWindow) {
+        Window("Cue", id: cueMainWindowID) {
             CueMainWindowView(model: model, hotkeyManager: hotkeyManager)
         }
         .defaultLaunchBehavior(.suppressed)
@@ -40,16 +42,18 @@ private struct CueMenuBarMenuView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text(model.menuBarPrimaryStatus)
+        let presentation = model.presentation
 
-        if let secondaryStatus = model.menuBarSecondaryStatus {
+        Text(presentation.menuBarPrimaryStatus)
+
+        if let secondaryStatus = presentation.menuBarSecondaryStatus {
             Text(secondaryStatus)
         }
 
         Divider()
 
         Button("Open Cue") {
-            openWindow(id: CueSceneID.mainWindow)
+            openWindow(id: cueMainWindowID)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
         .accessibilityIdentifier(CueAccessibilityID.openCueMenuItem)
@@ -57,7 +61,7 @@ private struct CueMenuBarMenuView: View {
         Divider()
 
         Button("Quit Cue") {
-            model.perform(.quit)
+            NSApplication.shared.terminate(nil)
         }
     }
 }
@@ -66,8 +70,10 @@ private struct CueMenuBarLabelView: View {
     @Bindable var model: CueAppModel
 
     var body: some View {
-        Image(systemName: model.menuBarSymbolName)
-            .accessibilityLabel(model.menuBarPrimaryStatus)
+        let presentation = model.presentation
+
+        Image(systemName: presentation.menuBarSymbolName)
+            .accessibilityLabel(presentation.menuBarPrimaryStatus)
             .accessibilityIdentifier(CueAccessibilityID.menuBarTrigger)
     }
 }

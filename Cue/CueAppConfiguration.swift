@@ -8,21 +8,18 @@ enum CueAppConfiguration {
     nonisolated static let debugCapturesEnabledDefaultsKey = "Cue.debugCapturesEnabled"
     nonisolated static let uiTestingLaunchArgument = "--ui-testing"
 
-    nonisolated static func modelDownloadDirectory(fileManager: FileManager = .default) -> URL {
-        appDirectory(in: .applicationSupportDirectory, fileManager: fileManager)
+    nonisolated static func modelDownloadDirectory() -> URL {
+        appDirectory(in: .applicationSupportDirectory)
             .appendingPathComponent("Models", isDirectory: true)
     }
 
-    nonisolated static func debugCaptureRootDirectory(fileManager: FileManager = .default) -> URL {
-        appDirectory(in: .cachesDirectory, fileManager: fileManager)
+    nonisolated static func debugCaptureRootDirectory() -> URL {
+        appDirectory(in: .cachesDirectory)
             .appendingPathComponent("DebugCaptures", isDirectory: true)
     }
 
-    nonisolated private static func appDirectory(
-        in searchPathDirectory: FileManager.SearchPathDirectory,
-        fileManager: FileManager
-    ) -> URL {
-        let directoryURL = fileManager.urls(for: searchPathDirectory, in: .userDomainMask)[0]
+    nonisolated private static func appDirectory(in searchPathDirectory: FileManager.SearchPathDirectory) -> URL {
+        let directoryURL = FileManager.default.urls(for: searchPathDirectory, in: .userDomainMask)[0]
         return directoryURL.appendingPathComponent(bundleIdentifier, isDirectory: true)
     }
 

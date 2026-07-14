@@ -4,23 +4,23 @@ import Testing
 @MainActor
 struct CueAppPresentationTests {
     @Test func accessibilityRequiredPresentationShowsSetupPrompt() {
-        var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
+        var state = CueAppState(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
-        state.setup.modelStatus = .ready
+        state.modelStatus = .ready
 
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.needsPermissionPrompt)
-        #expect(presentation.accessibilityPermission.primaryAction == .requestAccessibilityPermission)
-        #expect(presentation.accessibilityPermission.secondaryAction == .openAccessibilitySettings)
+        #expect(presentation.accessibilityPermission?.primaryAction == .requestAccessibilityPermission)
+        #expect(presentation.accessibilityPermission?.secondaryAction == .openAccessibilitySettings)
     }
 
     @Test func failedModelPreparationPresentationOffersRetryAction() {
-        var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        var state = CueAppState(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
-        state.setup.modelStatus = .failed("Model load failed")
+        state.modelStatus = .failed("Model load failed")
 
         let presentation = CueAppPresentation(state: state)
 
@@ -28,10 +28,10 @@ struct CueAppPresentationTests {
     }
 
     @Test func nonModelFailurePresentationShowsError() {
-        var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        var state = CueAppState(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
-        state.setup.modelStatus = .ready
+        state.modelStatus = .ready
         state.session = .failed(CueFailure.from(CueError.emptyTranscript))
 
         let presentation = CueAppPresentation(state: state)
@@ -40,10 +40,10 @@ struct CueAppPresentationTests {
     }
 
     @Test func fullyConfiguredPresentationDoesNotNeedPermissionPrompt() {
-        var state = CueAppState.initial(
-            permissionSnapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        var state = CueAppState(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
-        state.setup.modelStatus = .ready
+        state.modelStatus = .ready
 
         let presentation = CueAppPresentation(state: state)
 

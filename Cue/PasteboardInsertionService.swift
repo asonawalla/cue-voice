@@ -12,12 +12,18 @@ private func cueDefaultPasteboardRestoreSleep(_ duration: TimeInterval) async {
     try? await Task.sleep(nanoseconds: nanoseconds)
 }
 
+private enum ClipboardRestoreState {
+    case restored
+    case skippedClipboardChanged
+    case failed
+}
+
 @MainActor
 protocol TextInsertionService: AnyObject {
     func insert(_ text: String) async throws -> CueInsertionResult
 }
 
-struct CueRunningApplication: Equatable {
+struct CueRunningApplication {
     let processIdentifier: pid_t
     let localizedName: String?
     let bundleIdentifier: String?
@@ -27,20 +33,20 @@ protocol FrontmostApplicationResolving {
     func frontmostApplication() -> CueRunningApplication?
 }
 
-struct CuePasteboardRepresentation: Equatable {
+struct CuePasteboardRepresentation {
     let type: NSPasteboard.PasteboardType
     let data: Data
 }
 
-struct CuePasteboardItemSnapshot: Equatable {
+struct CuePasteboardItemSnapshot {
     let representations: [CuePasteboardRepresentation]
 }
 
-struct CuePasteboardSnapshot: Equatable {
+struct CuePasteboardSnapshot {
     let items: [CuePasteboardItemSnapshot]
 }
 
-struct CuePasteboardOwnership: Equatable {
+struct CuePasteboardOwnership {
     let changeCount: Int
     let token: String?
 }
@@ -170,11 +176,7 @@ final class PasteboardInsertionService: TextInsertionService {
         logClipboardRestoreState(restoreState, targetAppName: targetAppName, context: "successful paste")
 
         return CueInsertionResult(
-            delivery: .pasteCommandSent,
-            targetAppName: targetAppName,
-            targetBundleIdentifier: targetApplication.bundleIdentifier,
             pasteDuration: pasteDuration,
-            clipboardRestoreState: restoreState,
             pasteCommandPostedAt: pasteCommandPostedAt
         )
     }
@@ -199,7 +201,7 @@ final class PasteboardInsertionService: TextInsertionService {
         from snapshot: CuePasteboardSnapshot,
         expectedOwnershipToken: String,
         expectedChangeCount: Int
-    ) -> CueClipboardRestoreState {
+    ) -> ClipboardRestoreState {
         let ownership = pasteboard.currentOwnership()
 
         guard ownership.changeCount == expectedChangeCount, ownership.token == expectedOwnershipToken else {
@@ -216,7 +218,7 @@ final class PasteboardInsertionService: TextInsertionService {
     }
 
     private func logClipboardRestoreState(
-        _ restoreState: CueClipboardRestoreState,
+        _ restoreState: ClipboardRestoreState,
         targetAppName: String,
         context: String
     ) {

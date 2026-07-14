@@ -2,6 +2,7 @@
 
 import AppKit
 import Foundation
+import KeyboardShortcuts
 
 @MainActor
 extension CueAppEnvironment {
@@ -16,29 +17,38 @@ extension CueAppEnvironment {
         )
         let hotkeyManager = CueHotkeyManager(
             appModel: model,
-            bindingService: DisabledHotkeyBindingService()
+            bindingService: UITestHotkeyBindingService()
         )
 
         return CueAppEnvironment(model: model, hotkeyManager: hotkeyManager)
     }
 }
 
+private final class UITestHotkeyBindingService: HotkeyBindingService {
+    func currentShortcut() -> KeyboardShortcuts.Shortcut? {
+        defaultPushToTalkShortcut
+    }
+
+    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        _ = shortcut
+    }
+
+    func events() -> AsyncStream<KeyboardShortcuts.EventType> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+}
+
 @MainActor
 private final class UITestPermissionService: PermissionService {
-    private var snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
-
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
-        snapshot
+        CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
     }
 
-    func requestMicrophonePermission() async -> CuePermissionState {
-        snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: snapshot.accessibility)
-        return .granted
-    }
+    func requestMicrophonePermission() async {}
 
-    func requestAccessibilityPermission() {
-        snapshot = CuePermissionSnapshot(microphone: snapshot.microphone, accessibility: .granted)
-    }
+    func requestAccessibilityPermission() {}
 
     func openSystemSettings(for permission: CuePermissionKind) {
         _ = permission
@@ -55,14 +65,8 @@ private final class UITestTranscriptionService: TranscriptionService {
 
     func startRecording() async throws {}
 
-    func stopRecording() async throws -> CueTranscriptionResult {
-        CueTranscriptionResult(
-            text: "UI test transcript",
-            language: "en",
-            recordingDuration: 1.2,
-            modelLoadDuration: 0.1,
-            pipelineDuration: 0.2
-        )
+    func stopRecording() async throws -> String {
+        "UI test transcript"
     }
 }
 
@@ -70,11 +74,7 @@ private final class UITestTranscriptionService: TranscriptionService {
 private final class UITestTextInsertionService: TextInsertionService {
     func insert(_ text: String) async throws -> CueInsertionResult {
         CueInsertionResult(
-            delivery: .pasteCommandSent,
-            targetAppName: "Notes",
-            targetBundleIdentifier: "com.apple.Notes",
             pasteDuration: 0.05,
-            clipboardRestoreState: .restored,
             pasteCommandPostedAt: Date()
         )
     }

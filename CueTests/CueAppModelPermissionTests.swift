@@ -20,13 +20,14 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
+        await yieldUntil { permissionService.requestMicrophoneCallCount == 1 }
 
         #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(!model.isReadyToRecord)
+        #expect(!model.state.permissions.isFullyConfigured)
         #expect(transcriptionService.prepareCallCount == 0)
         #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.sessionState == .idle)
+        #expect(model.state.session == .idle)
     }
 
     @Test func pushToTalkWithDeniedMicrophoneShowsErrorWithoutStartingRecording() async throws {
@@ -43,10 +44,10 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
 
         #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.errorMessage == CueCopy.errorMessage(for: CueError.microphonePermissionDenied))
+        #expect(model.presentation.errorMessage == CueCopy.errorMessage(for: CueError.microphonePermissionDenied))
     }
 
     @Test func pushToTalkWithoutAccessibilityShowsError() async throws {
@@ -63,10 +64,10 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
 
         #expect(transcriptionService.startRecordingCallCount == 0)
-        #expect(model.errorMessage == CueCopy.errorMessage(for: CueError.accessibilityPermissionDenied))
+        #expect(model.presentation.errorMessage == CueCopy.errorMessage(for: CueError.accessibilityPermissionDenied))
     }
 
     @Test func refreshPermissionsKeepsAccessibilityFailureUntilAccessibilityIsGranted() async throws {
@@ -83,11 +84,11 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
         await model.refreshPermissions()
 
         #expect(
-            model.sessionState == .failed(CueFailure.from(CueError.accessibilityPermissionDenied))
+            model.state.session == .failed(CueFailure.from(CueError.accessibilityPermissionDenied))
         )
     }
 
@@ -105,12 +106,12 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
         permissionService.snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
 
         await model.refreshPermissions()
 
-        #expect(model.sessionState == .idle)
+        #expect(model.state.session == .idle)
     }
 
     @Test func refreshPermissionsClearsMicrophoneFailureWhenMicrophoneBecomesReady() async throws {
@@ -127,17 +128,18 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
         permissionService.snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
 
         await model.refreshPermissions()
 
-        #expect(model.sessionState == .idle)
+        #expect(model.state.session == .idle)
     }
 
     @Test func refreshPermissionsDoesNotClearNonPermissionFailures() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
+        insertionService.insertError = CueError.pasteFailed("paste unavailable")
         let permissionService = FakePermissionService()
         let model = CueAppModel(
             transcriptionService: transcriptionService,
@@ -147,11 +149,14 @@ struct CueAppModelPermissionTests {
         )
 
         await model.launch()
-        model.state.session = .failed(CueFailure.from(CueError.emptyTranscript))
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        model.handlePushToTalkReleased()
+        await yieldUntil { model.state.currentFailure != nil }
 
         await model.refreshPermissions()
 
-        #expect(model.sessionState == .failed(CueFailure.from(CueError.emptyTranscript)))
+        #expect(model.state.session == .failed(CueFailure.from(CueError.pasteFailed("paste unavailable"))))
     }
 
     @Test func grantingMicrophonePermissionDoesNotWarmModelWithoutAccessibility() async throws {
@@ -173,9 +178,9 @@ struct CueAppModelPermissionTests {
         await model.requestMicrophonePermission()
 
         #expect(permissionService.requestMicrophoneCallCount == 1)
-        #expect(!model.isReadyToRecord)
+        #expect(!model.state.permissions.isFullyConfigured)
         #expect(transcriptionService.prepareCallCount == 0)
-        #expect(model.needsPermissionPrompt)
+        #expect(model.presentation.needsPermissionPrompt)
     }
 
     @Test func openingAccessibilitySettingsRequestsAccessBeforeShowingSystemSettings() async throws {
@@ -198,4 +203,16 @@ struct CueAppModelPermissionTests {
         #expect(permissionService.openedSettingsPermissions == [.accessibility])
     }
 
+    private func yieldUntil(
+        maxYields: Int = 20,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxYields {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+    }
 }

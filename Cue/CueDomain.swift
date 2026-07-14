@@ -24,7 +24,7 @@ enum CueAccessibilityPermissionState: Equatable {
     }
 }
 
-struct CuePermissionSnapshot: Equatable {
+struct CuePermissionSnapshot {
     let microphone: CuePermissionState
     let accessibility: CueAccessibilityPermissionState
 
@@ -33,10 +33,6 @@ struct CuePermissionSnapshot: Equatable {
     }
 
     var isAccessibilityReady: Bool {
-        accessibility.isGranted
-    }
-
-    var canAutoPaste: Bool {
         accessibility.isGranted
     }
 
@@ -82,42 +78,15 @@ enum ModelPreparationStatus: Equatable, Sendable {
     }
 }
 
-struct CueTranscriptionResult: Equatable, Sendable {
-    let text: String
-    let language: String
-    let recordingDuration: TimeInterval
-    let modelLoadDuration: TimeInterval
-    let pipelineDuration: TimeInterval
-}
-
-struct CueInsertionResult: Equatable {
-    let delivery: CueInsertionDelivery
-    let targetAppName: String?
-    let targetBundleIdentifier: String?
+struct CueInsertionResult {
     let pasteDuration: TimeInterval
-    let clipboardRestoreState: CueClipboardRestoreState
     /// Timestamp captured immediately after Command-V was posted, before the clipboard restore grace period.
     let pasteCommandPostedAt: Date
 }
 
-enum CueClipboardRestoreState: Equatable {
-    case restored
-    case skippedClipboardChanged
-    case failed
-}
-
-enum CueInsertionDelivery: Equatable {
-    case pasteCommandSent
-}
-
-struct LatencyMetrics: Equatable {
-    let recordingDuration: TimeInterval
+struct LatencyMetrics {
     let transcriptionDuration: TimeInterval
     let pasteDuration: TimeInterval
-    let totalDuration: TimeInterval
-    let modelLoadDuration: TimeInterval
-    let backendPipelineDuration: TimeInterval
-
     /// Time from PTT key-down to first audible/visual ack (sound + icon change).
     let pressToAck: TimeInterval
     /// Time from PTT key-up to first sign Cue is working (stop sound + transcribing state).
@@ -134,7 +103,6 @@ protocol SoundService {
 }
 
 enum CueError: Error, Equatable, Sendable {
-    case busy
     case microphonePermissionDenied
     case accessibilityPermissionDenied
     case missingMicrophoneInput
@@ -150,15 +118,6 @@ enum CueError: Error, Equatable, Sendable {
     case cannotPasteIntoCue
     case pasteFailed(String)
 
-    var isPermissionRelated: Bool {
-        switch self {
-        case .microphonePermissionDenied, .accessibilityPermissionDenied:
-            return true
-        default:
-            return false
-        }
-    }
-
     var isModelPreparationRelated: Bool {
         switch self {
         case .modelDownloadFailed, .modelLoadFailed:
@@ -172,8 +131,7 @@ enum CueError: Error, Equatable, Sendable {
         switch self {
         case .missingMicrophoneInput, .recordingFailed, .transcriptionFailed, .pasteFailed:
             return true
-        case .busy,
-                .microphonePermissionDenied,
+        case .microphonePermissionDenied,
                 .accessibilityPermissionDenied,
                 .recordingAlreadyInProgress,
                 .noRecordingInProgress,
@@ -206,57 +164,32 @@ enum CueSessionState: Equatable {
     }
 }
 
-struct CueFailure: Equatable {
-    let cueError: CueError?
-    let fallbackMessage: String
+enum CueFailure: Equatable {
+    case cue(CueError)
+    case message(String)
 
     static func from(_ error: Error) -> CueFailure {
         if let cueError = error as? CueError {
-            return CueFailure(cueError: cueError, fallbackMessage: "")
+            return .cue(cueError)
         }
 
-        return CueFailure(cueError: nil, fallbackMessage: error.localizedDescription)
+        return .message(error.localizedDescription)
+    }
+
+    var cueError: CueError? {
+        guard case .cue(let error) = self else {
+            return nil
+        }
+
+        return error
     }
 }
 
-struct CueSetupState: Equatable {
+struct CueAppState {
     var permissions: CuePermissionSnapshot
-    var hasLoadedPermissions: Bool
-    var modelStatus: ModelPreparationStatus
-}
-
-enum CueAppEvent: Equatable {
-    case permissionsRefreshed(CuePermissionSnapshot)
-    case modelStatusChanged(ModelPreparationStatus)
-    case modelPreparationSucceeded
-    case dictationAttemptStarted
-    case recordingStarted
-    case transcriptionStarted
-    case transcriptionCompleted(CueTranscriptionResult)
-    case insertionCompleted(CueInsertionResult, LatencyMetrics)
-    case failurePresented(CueFailure)
-}
-
-struct CueAppState: Equatable {
-    var setup: CueSetupState
-    var session: CueSessionState
-    var transcript: String
-    var lastInsertionResult: CueInsertionResult?
-    var latencyMetrics: LatencyMetrics?
-
-    static func initial(permissionSnapshot: CuePermissionSnapshot) -> CueAppState {
-        CueAppState(
-            setup: CueSetupState(
-                permissions: permissionSnapshot,
-                hasLoadedPermissions: true,
-                modelStatus: .idle
-            ),
-            session: .idle,
-            transcript: "",
-            lastInsertionResult: nil,
-            latencyMetrics: nil
-        )
-    }
+    var modelStatus: ModelPreparationStatus = .idle
+    var session: CueSessionState = .idle
+    var latencyMetrics: LatencyMetrics? = nil
 
     var currentFailure: CueFailure? {
         guard case .failed(let failure) = session else {
@@ -266,49 +199,4 @@ struct CueAppState: Equatable {
         return failure
     }
 
-    var isReadyToRecord: Bool {
-        setup.hasLoadedPermissions && setup.permissions.isFullyConfigured
-    }
-
-    var isModelReady: Bool {
-        setup.modelStatus.isReady
-    }
-
-    mutating func apply(_ event: CueAppEvent) {
-        switch event {
-        case .permissionsRefreshed(let snapshot):
-            setup.permissions = snapshot
-            setup.hasLoadedPermissions = true
-
-            if let cueError = currentFailure?.cueError, snapshot.resolves(cueError) {
-                session = .idle
-            }
-        case .modelStatusChanged(let status):
-            setup.modelStatus = status
-        case .modelPreparationSucceeded:
-            if currentFailure?.cueError?.isModelPreparationRelated == true {
-                session = .idle
-            }
-        case .dictationAttemptStarted:
-            latencyMetrics = nil
-
-            if case .failed = session {
-                session = .idle
-            }
-        case .recordingStarted:
-            session = .recording
-        case .transcriptionStarted:
-            session = .transcribing
-            latencyMetrics = nil
-        case .transcriptionCompleted(let result):
-            transcript = result.text
-            session = .pasting
-        case .insertionCompleted(let result, let metrics):
-            lastInsertionResult = result
-            latencyMetrics = metrics
-            session = .idle
-        case .failurePresented(let failure):
-            session = .failed(failure)
-        }
-    }
 }

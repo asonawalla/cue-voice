@@ -4,7 +4,6 @@ enum CueTheme {
     static let ink = Color.primary
     static let slate = Color.secondary
     static let accent = Color(red: 0.16, green: 0.42, blue: 0.66)
-    static let success = Color.green
     static let errorInk = Color.red
     static let errorText = Color.red.opacity(0.8)
 

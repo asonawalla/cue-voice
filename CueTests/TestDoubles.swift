@@ -11,13 +11,11 @@ final class FakeTranscriptionService: TranscriptionService {
     var prepareError: Error?
     var startRecordingError: Error?
     var stopRecordingError: Error?
-    var result = CueTranscriptionResult(
-        text: "milestone transcript",
-        language: "en",
-        recordingDuration: 1.5,
-        modelLoadDuration: 0.25,
-        pipelineDuration: 0.5
-    )
+    var suspendsStartRecording = false
+    var suspendsStopRecording = false
+    private var startRecordingContinuation: CheckedContinuation<Void, Never>?
+    private var stopRecordingContinuation: CheckedContinuation<Void, Never>?
+    var result = "milestone transcript"
 
     @MainActor
     func prepareModel() async throws {
@@ -34,14 +32,32 @@ final class FakeTranscriptionService: TranscriptionService {
     func startRecording() async throws {
         startRecordingCallCount += 1
 
+        if suspendsStartRecording {
+            await withCheckedContinuation { continuation in
+                startRecordingContinuation = continuation
+            }
+        }
+
         if let startRecordingError {
             throw startRecordingError
         }
     }
 
+    func resumeStartRecording() {
+        let continuation = startRecordingContinuation
+        startRecordingContinuation = nil
+        continuation?.resume()
+    }
+
     @MainActor
-    func stopRecording() async throws -> CueTranscriptionResult {
+    func stopRecording() async throws -> String {
         stopRecordingCallCount += 1
+
+        if suspendsStopRecording {
+            await withCheckedContinuation { continuation in
+                stopRecordingContinuation = continuation
+            }
+        }
 
         if let stopRecordingError {
             throw stopRecordingError
@@ -49,23 +65,27 @@ final class FakeTranscriptionService: TranscriptionService {
 
         return result
     }
+
+    func resumeStopRecording() {
+        let continuation = stopRecordingContinuation
+        stopRecordingContinuation = nil
+        continuation?.resume()
+    }
 }
 
 @MainActor
 final class FakeTextInsertionService: TextInsertionService {
     var insertCallCount = 0
+    var insertedTexts: [String] = []
     var insertError: Error?
     var result = CueInsertionResult(
-        delivery: .pasteCommandSent,
-        targetAppName: "TextEdit",
-        targetBundleIdentifier: "com.apple.TextEdit",
         pasteDuration: 0.12,
-        clipboardRestoreState: .restored,
         pasteCommandPostedAt: Date()
     )
 
     func insert(_ text: String) async throws -> CueInsertionResult {
         insertCallCount += 1
+        insertedTexts.append(text)
 
         if let insertError {
             throw insertError
@@ -78,7 +98,6 @@ final class FakeTextInsertionService: TextInsertionService {
 @MainActor
 final class FakePermissionService: PermissionService {
     var snapshot: CuePermissionSnapshot
-    var currentSnapshotCallCount = 0
     var requestMicrophoneCallCount = 0
     var requestAccessibilityCallCount = 0
     var openedSettingsPermissions: [CuePermissionKind] = []
@@ -89,18 +108,15 @@ final class FakePermissionService: PermissionService {
     }
 
     func currentPermissionSnapshot() -> CuePermissionSnapshot {
-        currentSnapshotCallCount += 1
         return snapshot
     }
 
-    func requestMicrophonePermission() async -> CuePermissionState {
+    func requestMicrophonePermission() async {
         requestMicrophoneCallCount += 1
 
         if let microphoneRequestResult {
             snapshot = CuePermissionSnapshot(microphone: microphoneRequestResult, accessibility: snapshot.accessibility)
         }
-
-        return snapshot.microphone
     }
 
     func requestAccessibilityPermission() {

@@ -81,16 +81,96 @@ struct CueHotkeyManagerTests {
         bindingService.triggerKeyDown()
         await yieldUntil { transcriptionService.startRecordingCallCount == 1 }
 
-        #expect(model.sessionState == .recording)
+        #expect(model.state.session == .recording)
         #expect(soundService.playRecordingStartedCallCount == 1)
 
         bindingService.triggerKeyUp()
         await yieldUntil { insertionService.insertCallCount == 1 }
 
         #expect(transcriptionService.stopRecordingCallCount == 1)
-        #expect(model.sessionState == .idle)
-        #expect(model.transcript == transcriptionService.result.text)
+        #expect(model.state.session == .idle)
+        #expect(insertionService.insertedTexts == [transcriptionService.result])
         #expect(soundService.playRecordingStoppedCallCount == 1)
+    }
+
+    @Test func immediateKeyUpWaitsForSuspendedRecordingStart() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let transcriptionService = FakeTranscriptionService()
+        transcriptionService.suspendsStartRecording = true
+        let insertionService = FakeTextInsertionService()
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: FakePermissionService(),
+            soundService: FakeSoundService(),
+            notificationCenter: NotificationCenter()
+        )
+        let bindingService = FakeHotkeyBindingService(shortcut: defaultPushToTalkShortcut)
+
+        await model.launch()
+        let manager = CueHotkeyManager(
+            appModel: model,
+            defaults: defaults,
+            bindingService: bindingService
+        )
+
+        _ = manager
+        bindingService.triggerKeyDown()
+        bindingService.triggerKeyUp()
+        await yieldUntil { transcriptionService.startRecordingCallCount == 1 }
+
+        transcriptionService.resumeStartRecording()
+        await yieldUntil { insertionService.insertCallCount == 1 }
+
+        #expect(transcriptionService.stopRecordingCallCount == 1)
+        #expect(model.state.session == .idle)
+    }
+
+    @Test func pressWhileTranscribingIsIgnoredInsteadOfReplayedAfterInsertion() async throws {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let transcriptionService = FakeTranscriptionService()
+        transcriptionService.suspendsStopRecording = true
+        let insertionService = FakeTextInsertionService()
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: FakePermissionService(),
+            soundService: FakeSoundService(),
+            notificationCenter: NotificationCenter()
+        )
+        let bindingService = FakeHotkeyBindingService(shortcut: defaultPushToTalkShortcut)
+
+        await model.launch()
+        let manager = CueHotkeyManager(
+            appModel: model,
+            defaults: defaults,
+            bindingService: bindingService
+        )
+
+        _ = manager
+        bindingService.triggerKeyDown()
+        await yieldUntil { model.state.session == .recording }
+        bindingService.triggerKeyUp()
+        await yieldUntil { transcriptionService.stopRecordingCallCount == 1 }
+
+        bindingService.triggerKeyDown()
+        bindingService.triggerKeyUp()
+        for _ in 0..<5 {
+            await Task.yield()
+        }
+        transcriptionService.resumeStopRecording()
+        await yieldUntil { insertionService.insertCallCount == 1 }
+
+        #expect(transcriptionService.startRecordingCallCount == 1)
+        #expect(transcriptionService.stopRecordingCallCount == 1)
+        #expect(model.state.latencyMetrics?.releaseToProofOfLife ?? -1 >= 0)
+        #expect(model.state.session == .idle)
     }
 
     private func makeManager(
@@ -128,8 +208,7 @@ struct CueHotkeyManagerTests {
 private final class FakeHotkeyBindingService: HotkeyBindingService {
     private(set) var shortcut: KeyboardShortcuts.Shortcut?
     private(set) var setShortcutCalls: [KeyboardShortcuts.Shortcut?] = []
-    private var keyDownAction: (() -> Void)?
-    private var keyUpAction: (() -> Void)?
+    private var eventContinuation: AsyncStream<KeyboardShortcuts.EventType>.Continuation?
 
     init(shortcut: KeyboardShortcuts.Shortcut?) {
         self.shortcut = shortcut
@@ -144,19 +223,17 @@ private final class FakeHotkeyBindingService: HotkeyBindingService {
         self.shortcut = shortcut
     }
 
-    func registerKeyDown(_ action: @escaping () -> Void) {
-        keyDownAction = action
-    }
-
-    func registerKeyUp(_ action: @escaping () -> Void) {
-        keyUpAction = action
+    func events() -> AsyncStream<KeyboardShortcuts.EventType> {
+        AsyncStream { continuation in
+            eventContinuation = continuation
+        }
     }
 
     func triggerKeyDown() {
-        keyDownAction?()
+        eventContinuation?.yield(.keyDown)
     }
 
     func triggerKeyUp() {
-        keyUpAction?()
+        eventContinuation?.yield(.keyUp)
     }
 }

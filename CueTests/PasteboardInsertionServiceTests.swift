@@ -162,11 +162,8 @@ struct PasteboardInsertionServiceTests {
             sleepAfterPaste: noOpSleep
         )
 
-        let result = try await service.insert("hello")
+        _ = try await service.insert("hello")
 
-        #expect(result.delivery == .pasteCommandSent)
-        #expect(result.targetAppName == "TextEdit")
-        #expect(result.clipboardRestoreState == .restored)
         #expect(poster.postedProcessIdentifiers == [12])
         #expect(pasteboard.writtenStrings == ["hello"])
         #expect(pasteboard.restoreContentsCallCount == 1)
@@ -196,9 +193,8 @@ struct PasteboardInsertionServiceTests {
             }
         )
 
-        let result = try await service.insert("hello")
+        _ = try await service.insert("hello")
 
-        #expect(result.clipboardRestoreState == .skippedClipboardChanged)
         #expect(pasteboard.restoreContentsCallCount == 0)
         #expect(pasteboard.currentPlainText == "external clipboard")
     }
@@ -231,7 +227,7 @@ struct PasteboardInsertionServiceTests {
         #expect(pasteboard.currentPlainText == "before")
     }
 
-    @Test func restoreFailureKeepsPasteSuccessfulAndReportsFailedRestore() async throws {
+    @Test func restoreFailureKeepsPasteSuccessfulAndLeavesTranscriptOnClipboard() async throws {
         let resolver = FakeFrontmostApplicationResolver(
             application: CueRunningApplication(
                 processIdentifier: 13,
@@ -251,9 +247,8 @@ struct PasteboardInsertionServiceTests {
             sleepAfterPaste: noOpSleep
         )
 
-        let result = try await service.insert("hello")
+        _ = try await service.insert("hello")
 
-        #expect(result.clipboardRestoreState == .failed)
         #expect(pasteboard.restoreContentsCallCount == 1)
         #expect(pasteboard.currentPlainText == "hello")
     }

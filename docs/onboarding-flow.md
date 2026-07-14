@@ -1,6 +1,6 @@
 # Cue Onboarding Flow
 
-Last validated: March 11, 2026
+Last validated: July 13, 2026
 
 ## Purpose
 
@@ -39,8 +39,7 @@ There are two live entry points into setup:
 On app launch, Cue:
 
 1. reads the current permission snapshot
-2. marks permissions as loaded
-3. attempts model warmup only if both permissions are already granted
+2. attempts model warmup only if both permissions are already granted
 
 If permissions are incomplete, the main window shows permission setup cards instead of the ready-state controls.
 
@@ -127,7 +126,6 @@ The user sees:
 
 The menu bar status reflects onboarding state:
 
-- before permission evaluation completes: `Checking Permissions`
 - missing microphone: `Microphone Required`
 - missing Accessibility: `Accessibility Required`
 - permissions granted but model not ready: `Preparing Model`
@@ -148,23 +146,12 @@ The following are not part of the current onboarding contract:
 - automatic recording after microphone bootstrap while Accessibility is still missing
 - model warmup before both permissions are granted
 
-## Legacy Plumbing That Is Not Part Of The Live Flow
-
-Production code still contains a restart/relaunch path wired through the app action, app model, workflow coordinator, setup coordinator, and permission service.
-
-Nothing in the current presentation layer emits that action.
-
-As of March 11, 2026, the restart path is not part of Cue's live onboarding behavior and should not be treated as a user-visible setup step.
-
 ## Implementation References
 
 Primary implementation references:
 
 - `Cue/CueApp.swift`
 - `Cue/CueAppModel.swift`
-- `Cue/CueWorkflowCoordinator.swift`
-- `Cue/CueSetupCoordinator.swift`
-- `Cue/CueDictationCoordinator.swift`
 - `Cue/CuePresentation.swift`
 - `Cue/CueMainWindowView.swift`
 - `Cue/CuePermissionService.swift`

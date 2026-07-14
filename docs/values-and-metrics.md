@@ -28,7 +28,7 @@ Always break speed metrics down by: warm vs cold model, utterance length, target
 
 ### What we already track
 
-We already record `recordingDuration`, `transcriptionDuration`, `pasteDuration`, `totalDuration`, `modelLoadDuration`, and `backendPipelineDuration` per run. Useful, but they don't directly map to user-felt latency. Press-to-ack, release-to-proof-of-life, and release-to-insert need to be first-class.
+The Last Run card shows `pressToAck`, `releaseToProofOfLife`, `releaseToInsert`, `transcriptionDuration`, and `pasteDuration`. Debug captures separately record audio duration and raw WhisperKit segment timings when the user enables them.
 
 ### Rules
 
