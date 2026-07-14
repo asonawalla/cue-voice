@@ -5,5 +5,4 @@ set -euo pipefail
 xcodebuild test \
   -project Cue.xcodeproj \
   -scheme Cue \
-  -destination "platform=macOS" \
-  -skip-testing:CueUITests
+  -destination "platform=macOS"

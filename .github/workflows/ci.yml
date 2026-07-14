@@ -19,8 +19,5 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Run build
-        run: ./scripts/build.sh
-
       - name: Run tests
         run: ./scripts/test.sh

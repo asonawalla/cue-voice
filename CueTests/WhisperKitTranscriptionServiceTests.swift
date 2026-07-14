@@ -117,10 +117,7 @@ struct WhisperKitTranscriptionServiceTests {
 
         #expect(client.startRecordingCallCount == 1)
         #expect(client.stopRecordingCallCount == 1)
-        #expect(result.text == "hello world")
-        #expect(result.language == "en")
-        #expect(result.modelLoadDuration == 0.4)
-        #expect(result.pipelineDuration == 1.0)
+        #expect(result == "hello world")
     }
 
     @Test func stopRecordingRejectsWhitespaceOnlyTranscript() async throws {
@@ -232,13 +229,12 @@ struct WhisperKitTranscriptionServiceTests {
             timeZone: timeZone
         )
 
-        let capture = try await store.createCapture(audioSamples: [0], recordingDuration: 1.0)
+        let capture = try await store.createCapture(audioSamples: [0])
 
         let expectedCaptureID = "2026-05-04T12-34-56.789Z-12345678-1234-5678-1234-567812345678"
-        #expect(capture.captureID == expectedCaptureID)
-        #expect(capture.directoryURL.lastPathComponent == expectedCaptureID)
-        #expect(capture.directoryURL.deletingLastPathComponent().lastPathComponent == "2026-05-04")
-        #expect(FileManager.default.fileExists(atPath: capture.directoryURL.appendingPathComponent("clip.wav").path))
+        #expect(capture.lastPathComponent == expectedCaptureID)
+        #expect(capture.deletingLastPathComponent().lastPathComponent == "2026-05-04")
+        #expect(FileManager.default.fileExists(atPath: capture.appendingPathComponent("clip.wav").path))
     }
 
     @Test func debugCaptureStoreWritesTypedResultJSON() async throws {
@@ -246,7 +242,7 @@ struct WhisperKitTranscriptionServiceTests {
         defer { try? FileManager.default.removeItem(at: captureRoot) }
 
         let store = DebugCaptureStore(rootDirectory: captureRoot)
-        let capture = try await store.createCapture(audioSamples: [0], recordingDuration: 1.0)
+        let capture = try await store.createCapture(audioSamples: [0])
 
         try await store.saveResult(
             for: capture,
@@ -264,10 +260,10 @@ struct WhisperKitTranscriptionServiceTests {
             errorMessage: nil
         )
 
-        let resultData = try Data(contentsOf: capture.directoryURL.appendingPathComponent("result.json"))
+        let resultData = try Data(contentsOf: capture.appendingPathComponent("result.json"))
         let document = try JSONDecoder().decode(DebugCaptureResultDocument.self, from: resultData)
 
-        #expect(document.captureID == capture.captureID)
+        #expect(document.captureID == capture.lastPathComponent)
         #expect(document.sampleCount == 1)
         #expect(document.recordingDuration == 1.5)
         #expect(document.finalTranscript == "hello")
@@ -288,8 +284,8 @@ struct WhisperKitTranscriptionServiceTests {
 
         let store = DebugCaptureStore(rootDirectory: captureRoot, sampleRate: 22_050)
 
-        let capture = try await store.createCapture(audioSamples: [0, 0.5], recordingDuration: 1.0)
-        let wavData = try Data(contentsOf: capture.directoryURL.appendingPathComponent("clip.wav"))
+        let capture = try await store.createCapture(audioSamples: [0, 0.5])
+        let wavData = try Data(contentsOf: capture.appendingPathComponent("clip.wav"))
 
         #expect(littleEndianUInt32(in: wavData, at: 24) == 22_050)
         #expect(littleEndianUInt32(in: wavData, at: 28) == 44_100)
@@ -318,7 +314,7 @@ struct WhisperKitTranscriptionServiceTests {
         try await service.startRecording()
         let result = try await service.stopRecording()
 
-        #expect(result.text == "hello world")
+        #expect(result == "hello world")
 
         let captureFolders = try FileManager.default.contentsOfDirectory(
             at: captureRoot,
@@ -408,7 +404,7 @@ struct WhisperKitTranscriptionServiceTests {
         try await service.startRecording()
         let result = try await service.stopRecording()
 
-        #expect(result.text == "hello")
+        #expect(result == "hello")
     }
 }
 
@@ -490,9 +486,8 @@ private final class FakeWhisperKitClient: WhisperKitClient {
         stopRecordingCallCount += 1
     }
 
-    func transcribe(audioSamples: [Float], language: String) async throws -> [WhisperKitTranscriptionSegment] {
+    func transcribe(audioSamples: [Float]) async throws -> [WhisperKitTranscriptionSegment] {
         _ = audioSamples
-        _ = language
 
         if let transcribeError {
             throw transcribeError
@@ -503,14 +498,13 @@ private final class FakeWhisperKitClient: WhisperKitClient {
 }
 
 private final class FailingDebugCaptureStore: DebugCaptureStoring {
-    func createCapture(audioSamples: [Float], recordingDuration: TimeInterval) async throws -> DebugCaptureHandle {
+    func createCapture(audioSamples: [Float]) async throws -> URL {
         _ = audioSamples
-        _ = recordingDuration
         throw NSError(domain: "CueTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "disk full"])
     }
 
     func saveResult(
-        for capture: DebugCaptureHandle,
+        for capture: URL,
         sampleCount: Int,
         recordingDuration: TimeInterval,
         segments: [WhisperKitTranscriptionSegment],

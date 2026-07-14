@@ -5,14 +5,10 @@ struct CueAppEnvironment {
     let model: CueAppModel
     let hotkeyManager: CueHotkeyManager
 
-    static var isUITesting: Bool {
-        ProcessInfo.processInfo.arguments.contains(CueAppConfiguration.uiTestingLaunchArgument)
-    }
-
     @MainActor
     static func make() -> CueAppEnvironment {
         #if DEBUG
-        if isUITesting {
+        if ProcessInfo.processInfo.arguments.contains(CueAppConfiguration.uiTestingLaunchArgument) {
             return makeUITesting()
         }
         #endif
@@ -36,9 +32,9 @@ extension NSSound: PlayableSound {}
 
 @MainActor
 final class SystemSoundService: SoundService {
-    private let recordingStartedSound: any PlayableSound
-    private let recordingStoppedSound: any PlayableSound
-    private let errorSound: any PlayableSound
+    private let recordingStartedSound: (any PlayableSound)?
+    private let recordingStoppedSound: (any PlayableSound)?
+    private let errorSound: (any PlayableSound)?
 
     init(
         recordingStartedSound: (any PlayableSound)? = nil,
@@ -47,13 +43,10 @@ final class SystemSoundService: SoundService {
     ) {
         self.recordingStartedSound = recordingStartedSound
             ?? Self.makeSound(named: NSSound.Name("Funk"))
-            ?? SilentPlayableSound()
         self.recordingStoppedSound = recordingStoppedSound
             ?? Self.makeSound(named: NSSound.Name("Bottle"))
-            ?? SilentPlayableSound()
         self.errorSound = errorSound
             ?? Self.makeSound(named: NSSound.Name("Basso"))
-            ?? SilentPlayableSound()
     }
 
     func playRecordingStarted() {
@@ -68,7 +61,11 @@ final class SystemSoundService: SoundService {
         restart(errorSound)
     }
 
-    private func restart(_ sound: any PlayableSound) {
+    private func restart(_ sound: (any PlayableSound)?) {
+        guard let sound else {
+            return
+        }
+
         sound.stop()
         _ = sound.play()
     }
@@ -79,18 +76,5 @@ final class SystemSoundService: SoundService {
         }
 
         return template.copy() as? NSSound
-    }
-}
-
-@MainActor
-private final class SilentPlayableSound: PlayableSound {
-    @discardableResult
-    func play() -> Bool {
-        false
-    }
-
-    @discardableResult
-    func stop() -> Bool {
-        false
     }
 }

@@ -7,7 +7,7 @@ import os
 @MainActor
 protocol PermissionService: AnyObject {
     func currentPermissionSnapshot() -> CuePermissionSnapshot
-    func requestMicrophonePermission() async -> CuePermissionState
+    func requestMicrophonePermission() async
     func requestAccessibilityPermission()
     func openSystemSettings(for permission: CuePermissionKind)
 }
@@ -30,16 +30,15 @@ final class SystemPermissionService: PermissionService {
         )
     }
 
-    func requestMicrophonePermission() async -> CuePermissionState {
-        _ = await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { granted in
-                continuation.resume(returning: granted)
+    func requestMicrophonePermission() async {
+        await withCheckedContinuation { continuation in
+            AVAudioApplication.requestRecordPermission { _ in
+                continuation.resume()
             }
         }
 
         let currentState = microphonePermissionState
         logger.info("Microphone permission result: \(CueCopy.permissionStateTitle(currentState), privacy: .public)")
-        return currentState
     }
 
     func requestAccessibilityPermission() {

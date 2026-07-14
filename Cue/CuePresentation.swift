@@ -1,12 +1,11 @@
 import Foundation
 
-enum CueAppAction: Hashable {
+enum CueAppAction: Equatable {
     case requestMicrophonePermission
     case openMicrophoneSettings
     case requestAccessibilityPermission
     case openAccessibilitySettings
     case retryModelPreparation
-    case quit
 
     var title: String {
         switch self {
@@ -20,48 +19,57 @@ enum CueAppAction: Hashable {
             return "Open Accessibility Settings"
         case .retryModelPreparation:
             return "Retry Model Preparation"
-        case .quit:
-            return "Quit Cue"
         }
     }
 }
 
-struct CuePermissionSectionPresentation: Equatable {
+struct CuePermissionSectionPresentation {
     let detail: String
-    let primaryAction: CueAppAction?
+    let primaryAction: CueAppAction
     let secondaryAction: CueAppAction?
 }
 
-struct CueAppPresentation: Equatable {
-    let needsPermissionPrompt: Bool
-    let shouldOfferModelRetry: Bool
-    let menuBarSymbolName: String
-    let menuBarPrimaryStatus: String
-    let menuBarSecondaryStatus: String?
-    let microphonePermission: CuePermissionSectionPresentation
-    let accessibilityPermission: CuePermissionSectionPresentation
+struct CueAppPresentation {
+    let state: CueAppState
 
-    init(state: CueAppState) {
-        let hasLoadedPermissions = state.setup.hasLoadedPermissions
-        let permissions = state.setup.permissions
+    var needsPermissionPrompt: Bool {
+        !state.permissions.isFullyConfigured
+    }
 
-        needsPermissionPrompt = hasLoadedPermissions && !permissions.isFullyConfigured
-        shouldOfferModelRetry = state.isReadyToRecord && !state.isModelReady && !state.setup.modelStatus.isPreparing
+    var shouldOfferModelRetry: Bool {
+        state.permissions.isFullyConfigured && !state.modelStatus.isReady && !state.modelStatus.isPreparing
+    }
 
-        menuBarSymbolName = CueAppPresentation.makeMenuBarSymbolName(state: state)
-        menuBarPrimaryStatus = CueAppPresentation.makeMenuBarPrimaryStatus(state: state)
-        menuBarSecondaryStatus = CueAppPresentation.makeMenuBarSecondaryStatus(state: state)
+    var errorMessage: String? {
+        if let failure = state.currentFailure {
+            return CueCopy.failureMessage(failure)
+        }
 
-        microphonePermission = CueAppPresentation.makeMicrophonePresentation(for: permissions.microphone)
-        accessibilityPermission = CueAppPresentation.makeAccessibilityPresentation(for: permissions.accessibility)
+        return nil
+    }
+
+    var menuBarSymbolName: String {
+        Self.makeMenuBarSymbolName(state: state)
+    }
+
+    var menuBarPrimaryStatus: String {
+        Self.makeMenuBarPrimaryStatus(state: state)
+    }
+
+    var menuBarSecondaryStatus: String? {
+        Self.makeMenuBarSecondaryStatus(state: state)
+    }
+
+    var microphonePermission: CuePermissionSectionPresentation? {
+        Self.makeMicrophonePresentation(for: state.permissions.microphone)
+    }
+
+    var accessibilityPermission: CuePermissionSectionPresentation? {
+        Self.makeAccessibilityPresentation(for: state.permissions.accessibility)
     }
 
     private static func makeMenuBarSymbolName(state: CueAppState) -> String {
-        guard state.setup.hasLoadedPermissions else {
-            return "waveform.circle"
-        }
-
-        guard state.setup.permissions.isFullyConfigured else {
+        guard state.permissions.isFullyConfigured else {
             return "waveform.badge.exclamationmark"
         }
 
@@ -75,26 +83,22 @@ struct CueAppPresentation: Equatable {
         case .failed:
             return "waveform.badge.exclamationmark"
         case .idle:
-            return state.isModelReady ? "waveform" : "waveform.circle"
+            return state.modelStatus.isReady ? "waveform" : "waveform.circle"
         }
     }
 
     private static func makeMenuBarPrimaryStatus(state: CueAppState) -> String {
-        guard state.setup.hasLoadedPermissions else {
-            return "Checking Permissions"
-        }
-
-        guard state.setup.permissions.isMicrophoneReady else {
+        guard state.permissions.isMicrophoneReady else {
             return "Microphone Required"
         }
 
-        guard state.setup.permissions.isAccessibilityReady else {
+        guard state.permissions.isAccessibilityReady else {
             return "Accessibility Required"
         }
 
         switch state.session {
         case .idle:
-            guard state.isModelReady else {
+            guard state.modelStatus.isReady else {
                 return "Preparing Model"
             }
 
@@ -105,12 +109,8 @@ struct CueAppPresentation: Equatable {
     }
 
     private static func makeMenuBarSecondaryStatus(state: CueAppState) -> String? {
-        guard state.setup.hasLoadedPermissions else {
-            return "Cue is checking which permissions are available."
-        }
-
-        guard state.setup.permissions.isFullyConfigured else {
-            return CueCopy.permissionSetupSummary(state.setup.permissions)
+        guard state.permissions.isFullyConfigured else {
+            return CueCopy.permissionSetupSummary(state.permissions)
         }
 
         switch state.session {
@@ -123,15 +123,15 @@ struct CueAppPresentation: Equatable {
         case .failed(let failure):
             return CueCopy.failureMessage(failure)
         case .idle:
-            guard state.isModelReady else {
-                return CueCopy.modelPreparationStatusTitle(state.setup.modelStatus)
+            guard state.modelStatus.isReady else {
+                return CueCopy.modelPreparationStatusTitle(state.modelStatus)
             }
 
             return nil
         }
     }
 
-    private static func makeMicrophonePresentation(for permission: CuePermissionState) -> CuePermissionSectionPresentation {
+    private static func makeMicrophonePresentation(for permission: CuePermissionState) -> CuePermissionSectionPresentation? {
         switch permission {
         case .notDetermined:
             return CuePermissionSectionPresentation(
@@ -146,15 +146,11 @@ struct CueAppPresentation: Equatable {
                 secondaryAction: nil
             )
         case .granted:
-            return CuePermissionSectionPresentation(
-                detail: "Microphone is ready.",
-                primaryAction: nil,
-                secondaryAction: nil
-            )
+            return nil
         }
     }
 
-    private static func makeAccessibilityPresentation(for permission: CueAccessibilityPermissionState) -> CuePermissionSectionPresentation {
+    private static func makeAccessibilityPresentation(for permission: CueAccessibilityPermissionState) -> CuePermissionSectionPresentation? {
         switch permission {
         case .notGranted:
             return CuePermissionSectionPresentation(
@@ -163,11 +159,7 @@ struct CueAppPresentation: Equatable {
                 secondaryAction: .openAccessibilitySettings
             )
         case .granted:
-            return CuePermissionSectionPresentation(
-                detail: "Accessibility is ready. Cue can paste automatically.",
-                primaryAction: nil,
-                secondaryAction: nil
-            )
+            return nil
         }
     }
 }

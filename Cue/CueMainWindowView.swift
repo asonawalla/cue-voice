@@ -7,14 +7,16 @@ struct CueMainWindowView: View {
     @State private var isDiagnosticsExpanded = false
 
     var body: some View {
+        let presentation = model.presentation
+
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerSection
 
                 Group {
-                    if model.needsPermissionPrompt {
+                    if presentation.needsPermissionPrompt {
                         setupSection
-                    } else if model.shouldOfferModelRetry {
+                    } else if presentation.shouldOfferModelRetry {
                         modelRetrySection
                     } else {
                         readySection
@@ -22,7 +24,7 @@ struct CueMainWindowView: View {
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
-                if let errorMessage = model.errorMessage {
+                if let errorMessage = presentation.errorMessage {
                     errorSection(message: errorMessage)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -33,23 +35,25 @@ struct CueMainWindowView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .popoverBackground()
         .accessibilityIdentifier(CueAccessibilityID.mainWindowRoot)
-        .animation(.easeInOut(duration: 0.2), value: model.needsPermissionPrompt)
-        .animation(.easeInOut(duration: 0.2), value: model.shouldOfferModelRetry)
-        .animation(.easeInOut(duration: 0.25), value: model.errorMessage != nil)
+        .animation(.easeInOut(duration: 0.2), value: presentation.needsPermissionPrompt)
+        .animation(.easeInOut(duration: 0.2), value: presentation.shouldOfferModelRetry)
+        .animation(.easeInOut(duration: 0.25), value: presentation.errorMessage != nil)
     }
 
     private var headerSection: some View {
-        HStack(spacing: 14) {
-            Image(systemName: model.menuBarSymbolName)
+        let presentation = model.presentation
+
+        return HStack(spacing: 14) {
+            Image(systemName: presentation.menuBarSymbolName)
                 .font(.system(size: 28))
                 .foregroundStyle(CueTheme.accent)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(model.menuBarPrimaryStatus)
+                Text(presentation.menuBarPrimaryStatus)
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .foregroundStyle(CueTheme.ink)
 
-                if let secondary = model.menuBarSecondaryStatus {
+                if let secondary = presentation.menuBarSecondaryStatus {
                     Text(secondary)
                         .font(.system(.callout, design: .rounded))
                         .foregroundStyle(CueTheme.slate)
@@ -67,23 +71,21 @@ struct CueMainWindowView: View {
         let presentation = model.presentation
 
         return VStack(alignment: .leading, spacing: 16) {
-            if let micAction = presentation.microphonePermission.primaryAction {
+            if let microphone = presentation.microphonePermission {
                 permissionRow(
                     title: "Microphone",
-                    detail: presentation.microphonePermission.detail,
-                    isGranted: model.permissionSnapshot.isMicrophoneReady,
-                    primaryAction: micAction,
-                    secondaryAction: presentation.microphonePermission.secondaryAction
+                    detail: microphone.detail,
+                    primaryAction: microphone.primaryAction,
+                    secondaryAction: microphone.secondaryAction
                 )
             }
 
-            if let accessAction = presentation.accessibilityPermission.primaryAction {
+            if let accessibility = presentation.accessibilityPermission {
                 permissionRow(
                     title: "Accessibility",
-                    detail: presentation.accessibilityPermission.detail,
-                    isGranted: model.permissionSnapshot.isAccessibilityReady,
-                    primaryAction: accessAction,
-                    secondaryAction: presentation.accessibilityPermission.secondaryAction
+                    detail: accessibility.detail,
+                    primaryAction: accessibility.primaryAction,
+                    secondaryAction: accessibility.secondaryAction
                 )
             }
         }
@@ -92,15 +94,13 @@ struct CueMainWindowView: View {
     private func permissionRow(
         title: String,
         detail: String,
-        isGranted: Bool,
         primaryAction: CueAppAction,
         secondaryAction: CueAppAction?
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: isGranted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isGranted ? CueTheme.success : CueTheme.slate)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isGranted)
+                Image(systemName: "circle")
+                    .foregroundStyle(CueTheme.slate)
 
                 Text(title)
                     .font(.system(.subheadline, design: .rounded).weight(.medium))
@@ -109,24 +109,22 @@ struct CueMainWindowView: View {
                 Spacer()
             }
 
-            if !isGranted {
-                Text(detail)
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(CueTheme.slate)
+            Text(detail)
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(CueTheme.slate)
 
-                HStack(spacing: 8) {
-                    Button(primaryAction.title) {
-                        model.perform(primaryAction)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(CueTheme.accent)
+            HStack(spacing: 8) {
+                Button(primaryAction.title) {
+                    model.perform(primaryAction)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(CueTheme.accent)
 
-                    if let secondaryAction {
-                        Button(secondaryAction.title) {
-                            model.perform(secondaryAction)
-                        }
-                        .buttonStyle(.bordered)
+                if let secondaryAction {
+                    Button(secondaryAction.title) {
+                        model.perform(secondaryAction)
                     }
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -155,7 +153,7 @@ struct CueMainWindowView: View {
                 .foregroundStyle(CueTheme.slate)
             }
 
-            if let metrics = model.latencyMetrics {
+            if let metrics = model.state.latencyMetrics {
                 latencyMetricsCard(metrics)
             }
 
@@ -199,20 +197,17 @@ struct CueMainWindowView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .accessibilityElement(children: .contain)
-                            .accessibilityIdentifier(CueAccessibilityID.debugCapturesToggle)
 
                             HStack(spacing: 8) {
                                 Button("Open Debug Captures Folder") {
                                     model.openDebugCapturesFolder()
                                 }
                                 .buttonStyle(.bordered)
-                                .accessibilityIdentifier(CueAccessibilityID.openDebugCapturesButton)
 
                                 Button("Clear Saved Captures", role: .destructive) {
                                     model.clearDebugCaptures()
                                 }
                                 .buttonStyle(.bordered)
-                                .accessibilityIdentifier(CueAccessibilityID.clearDebugCapturesButton)
                             }
                         }
                         .padding(.top, 8)
@@ -345,60 +340,3 @@ private extension View {
         }
     }
 }
-
-#if DEBUG
-struct CueGlassPreviewHelper: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Glass Card Styles")
-                .font(.headline)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Regular Glass Card")
-                    .font(.subheadline)
-                Text("This card uses Liquid Glass on macOS 26+ or ultraThinMaterial fallback")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCard()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Tinted Glass Card (Error)")
-                    .font(.subheadline)
-                Text("This card shows error styling with red tint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCardTinted(tintColor: .red.opacity(0.3))
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Tinted Glass Card (Success)")
-                    .font(.subheadline)
-                Text("This card shows success styling with green tint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCardTinted(tintColor: .green.opacity(0.3))
-        }
-        .padding(20)
-        .frame(width: 320)
-        .popoverBackground()
-    }
-}
-
-#Preview("Glass Styles") {
-    CueGlassPreviewHelper()
-        .preferredColorScheme(.light)
-}
-
-#Preview("Glass Styles - Dark") {
-    CueGlassPreviewHelper()
-        .preferredColorScheme(.dark)
-}
-#endif

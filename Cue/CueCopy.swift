@@ -26,7 +26,7 @@ enum CueCopy {
             return "Cue needs microphone access before dictation can run."
         }
 
-        guard snapshot.canAutoPaste else {
+        guard snapshot.isAccessibilityReady else {
             return "Cue needs Accessibility permission to paste automatically."
         }
 
@@ -71,11 +71,12 @@ enum CueCopy {
     }
 
     static func failureMessage(_ failure: CueFailure) -> String {
-        if let cueError = failure.cueError {
+        switch failure {
+        case .cue(let cueError):
             return errorMessage(for: cueError)
+        case .message(let message):
+            return message
         }
-
-        return failure.fallbackMessage
     }
 
     static func errorMessage(for error: Error) -> String {
@@ -86,10 +87,8 @@ enum CueCopy {
         return error.localizedDescription
     }
 
-    static func errorMessage(for error: CueError) -> String {
+    nonisolated static func errorMessage(for error: CueError) -> String {
         switch error {
-        case .busy:
-            return "Cue is already handling another action."
         case .microphonePermissionDenied:
             return "Cue needs microphone access before it can record audio. Allow Cue in System Settings > Privacy & Security > Microphone."
         case .accessibilityPermissionDenied:
@@ -123,7 +122,7 @@ enum CueCopy {
 }
 
 private extension TimeInterval {
-    var formattedSeconds: String {
+    nonisolated var formattedSeconds: String {
         String(format: "%.2fs", self)
     }
 }

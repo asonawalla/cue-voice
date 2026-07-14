@@ -1,10 +1,10 @@
 import Foundation
 import WhisperKit
 
-protocol DebugCaptureStoring: AnyObject {
-    func createCapture(audioSamples: [Float], recordingDuration: TimeInterval) async throws -> DebugCaptureHandle
+nonisolated protocol DebugCaptureStoring: AnyObject {
+    func createCapture(audioSamples: [Float]) async throws -> URL
     func saveResult(
-        for capture: DebugCaptureHandle,
+        for captureDirectory: URL,
         sampleCount: Int,
         recordingDuration: TimeInterval,
         segments: [WhisperKitTranscriptionSegment],
@@ -13,12 +13,7 @@ protocol DebugCaptureStoring: AnyObject {
     ) async throws
 }
 
-struct DebugCaptureHandle: Equatable, Sendable {
-    let captureID: String
-    let directoryURL: URL
-}
-
-struct DebugCaptureResultDocument: Codable, Equatable, Sendable {
+nonisolated struct DebugCaptureResultDocument: Codable, Sendable {
     let captureID: String
     let sampleCount: Int
     let recordingDuration: TimeInterval
@@ -27,7 +22,7 @@ struct DebugCaptureResultDocument: Codable, Equatable, Sendable {
     let errorMessage: String?
 }
 
-struct DebugCaptureResultSegment: Codable, Equatable, Sendable {
+nonisolated struct DebugCaptureResultSegment: Codable, Equatable, Sendable {
     let text: String
     let language: String?
     let modelLoadDuration: TimeInterval
@@ -35,7 +30,6 @@ struct DebugCaptureResultSegment: Codable, Equatable, Sendable {
 }
 
 actor DebugCaptureStore: DebugCaptureStoring {
-    private let fileManager: FileManager
     private let rootDirectory: URL
     private let dateProvider: @Sendable () -> Date
     private let uuidProvider: @Sendable () -> UUID
@@ -43,14 +37,12 @@ actor DebugCaptureStore: DebugCaptureStoring {
     private let sampleRate: Int
 
     init(
-        fileManager: FileManager = .default,
         rootDirectory: URL,
         dateProvider: @escaping @Sendable () -> Date = Date.init,
         uuidProvider: @escaping @Sendable () -> UUID = UUID.init,
         timeZone: TimeZone = .current,
         sampleRate: Int = WhisperKit.sampleRate
     ) {
-        self.fileManager = fileManager
         self.rootDirectory = rootDirectory
         self.dateProvider = dateProvider
         self.uuidProvider = uuidProvider
@@ -58,8 +50,7 @@ actor DebugCaptureStore: DebugCaptureStoring {
         self.sampleRate = sampleRate
     }
 
-    func createCapture(audioSamples: [Float], recordingDuration: TimeInterval) async throws -> DebugCaptureHandle {
-        _ = recordingDuration
+    func createCapture(audioSamples: [Float]) async throws -> URL {
         let now = dateProvider()
         let dayDirectory = rootDirectory.appendingPathComponent(
             Self.dayFolderName(for: now, timeZone: timeZone),
@@ -72,15 +63,15 @@ actor DebugCaptureStore: DebugCaptureStoring {
         )
         let captureDirectory = dayDirectory.appendingPathComponent(captureID, isDirectory: true)
 
-        try fileManager.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
         try Self.wavData(from: audioSamples, sampleRate: sampleRate)
             .write(to: captureDirectory.appendingPathComponent("clip.wav"))
 
-        return DebugCaptureHandle(captureID: captureID, directoryURL: captureDirectory)
+        return captureDirectory
     }
 
     func saveResult(
-        for capture: DebugCaptureHandle,
+        for captureDirectory: URL,
         sampleCount: Int,
         recordingDuration: TimeInterval,
         segments: [WhisperKitTranscriptionSegment],
@@ -88,7 +79,7 @@ actor DebugCaptureStore: DebugCaptureStoring {
         errorMessage: String?
     ) async throws {
         let result = DebugCaptureResultDocument(
-            captureID: capture.captureID,
+            captureID: captureDirectory.lastPathComponent,
             sampleCount: sampleCount,
             recordingDuration: recordingDuration,
             rawSegments: segments.map {
@@ -103,7 +94,7 @@ actor DebugCaptureStore: DebugCaptureStoring {
             errorMessage: errorMessage
         )
 
-        let resultURL = capture.directoryURL.appendingPathComponent("result.json")
+        let resultURL = captureDirectory.appendingPathComponent("result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(result)

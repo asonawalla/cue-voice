@@ -4,24 +4,14 @@ import Testing
 
 @MainActor
 struct CueAppModelDictationTests {
-    @Test func handlePushToTalkReleasedStoresTranscriptAndPasteAttemptResult() async throws {
+    @Test func handlePushToTalkReleasedInsertsTranscriptAndStoresVisibleMetrics() async throws {
         let transcriptionService = FakeTranscriptionService()
         let insertionService = FakeTextInsertionService()
         let permissionService = FakePermissionService()
         let soundService = FakeSoundService()
-        transcriptionService.result = CueTranscriptionResult(
-            text: "milestone three transcript",
-            language: "en",
-            recordingDuration: 2.0,
-            modelLoadDuration: 0.25,
-            pipelineDuration: 0.5
-        )
+        transcriptionService.result = "milestone three transcript"
         insertionService.result = CueInsertionResult(
-            delivery: .pasteCommandSent,
-            targetAppName: "TextEdit",
-            targetBundleIdentifier: "com.apple.TextEdit",
             pasteDuration: 0.18,
-            clipboardRestoreState: .restored,
             pasteCommandPostedAt: Date()
         )
 
@@ -34,21 +24,45 @@ struct CueAppModelDictationTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
-        await model.handlePushToTalkReleased()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        model.handlePushToTalkReleased()
+        await yieldUntil { insertionService.insertCallCount == 1 }
 
-        #expect(model.sessionState == .idle)
-        #expect(model.transcript == "milestone three transcript")
-        #expect(model.lastInsertionResult == insertionService.result)
-        #expect(model.latencyMetrics != nil)
-        #expect(model.latencyMetrics?.recordingDuration == 2.0)
-        #expect(model.latencyMetrics?.pasteDuration == 0.18)
-        #expect((model.latencyMetrics?.totalDuration ?? 0) >= 2.18)
+        #expect(model.state.session == .idle)
+        #expect(insertionService.insertedTexts == ["milestone three transcript"])
+        #expect(model.state.latencyMetrics != nil)
+        #expect(model.state.latencyMetrics?.pasteDuration == 0.18)
         #expect(transcriptionService.startRecordingCallCount == 1)
         #expect(transcriptionService.stopRecordingCallCount == 1)
         #expect(insertionService.insertCallCount == 1)
         #expect(soundService.playRecordingStartedCallCount == 1)
         #expect(soundService.playRecordingStoppedCallCount == 1)
+    }
+
+    @Test func releaseWhileRecordingStartIsSuspendedStillStopsAndInserts() async throws {
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        transcriptionService.suspendsStartRecording = true
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: FakePermissionService(),
+            soundService: FakeSoundService(),
+            notificationCenter: NotificationCenter()
+        )
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { transcriptionService.startRecordingCallCount == 1 }
+
+        model.handlePushToTalkReleased()
+        transcriptionService.resumeStartRecording()
+        await yieldUntil { insertionService.insertCallCount == 1 }
+
+        #expect(transcriptionService.stopRecordingCallCount == 1)
+        #expect(insertionService.insertedTexts == [transcriptionService.result])
+        #expect(model.state.session == .idle)
     }
 
     @Test func launchFailureMovesStateToErrorWhenPermissionsAreSatisfied() async throws {
@@ -68,7 +82,7 @@ struct CueAppModelDictationTests {
 
         await model.launch()
 
-        #expect(model.errorMessage == "Cue could not prepare the small.en model: offline")
+        #expect(model.presentation.errorMessage == "Cue could not prepare the small.en model: offline")
         #expect(insertionService.insertCallCount == 0)
         #expect(soundService.playErrorCallCount == 0)
     }
@@ -88,10 +102,12 @@ struct CueAppModelDictationTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
-        await model.handlePushToTalkReleased()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        model.handlePushToTalkReleased()
+        await yieldUntil { model.state.currentFailure != nil }
 
-        #expect(model.errorMessage == "Cue could not transcribe the recording: backend offline")
+        #expect(model.presentation.errorMessage == "Cue could not transcribe the recording: backend offline")
         #expect(insertionService.insertCallCount == 0)
         #expect(soundService.playRecordingStartedCallCount == 1)
         #expect(soundService.playRecordingStoppedCallCount == 1)
@@ -114,12 +130,13 @@ struct CueAppModelDictationTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.currentFailure != nil }
 
         #expect(soundService.playRecordingStartedCallCount == 1)
         #expect(soundService.playErrorCallCount == 1)
-        #expect(model.errorMessage == "Cue could not start recording: audio device busy")
-        #expect(model.sessionState == .failed(CueFailure.from(CueError.recordingFailed("audio device busy"))))
+        #expect(model.presentation.errorMessage == "Cue could not start recording: audio device busy")
+        #expect(model.state.session == .failed(CueFailure.from(CueError.recordingFailed("audio device busy"))))
     }
 
     @Test func pasteFailurePlaysErrorSound() async throws {
@@ -138,13 +155,28 @@ struct CueAppModelDictationTests {
         )
 
         await model.launch()
-        await model.handlePushToTalkPressed()
-        await model.handlePushToTalkReleased()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        model.handlePushToTalkReleased()
+        await yieldUntil { model.state.currentFailure != nil }
 
         #expect(soundService.playRecordingStartedCallCount == 1)
         #expect(soundService.playRecordingStoppedCallCount == 1)
         #expect(soundService.playErrorCallCount == 1)
-        #expect(model.errorMessage == "Cue could not paste the transcript: event bridge down")
+        #expect(model.presentation.errorMessage == "Cue could not paste the transcript: event bridge down")
+    }
+
+    private func yieldUntil(
+        maxYields: Int = 20,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxYields {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
     }
 }
 
