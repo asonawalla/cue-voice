@@ -33,27 +33,26 @@ struct CueMainWindowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .popoverBackground()
-        .accessibilityIdentifier(CueAccessibilityID.mainWindowRoot)
+        .background(.regularMaterial)
         .animation(.easeInOut(duration: 0.2), value: presentation.needsPermissionPrompt)
         .animation(.easeInOut(duration: 0.2), value: presentation.shouldOfferModelRetry)
         .animation(.easeInOut(duration: 0.25), value: presentation.errorMessage != nil)
     }
 
     private var headerSection: some View {
-        let presentation = model.presentation
+        let status = model.presentation.status
 
         return HStack(spacing: 14) {
-            Image(systemName: presentation.menuBarSymbolName)
+            Image(systemName: status.symbolName)
                 .font(.system(size: 28))
                 .foregroundStyle(CueTheme.accent)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(presentation.menuBarPrimaryStatus)
+                Text(status.primary)
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .foregroundStyle(CueTheme.ink)
 
-                if let secondary = presentation.menuBarSecondaryStatus {
+                if let secondary = status.secondary {
                     Text(secondary)
                         .font(.system(.callout, design: .rounded))
                         .foregroundStyle(CueTheme.slate)
@@ -68,34 +67,60 @@ struct CueMainWindowView: View {
     }
 
     private var setupSection: some View {
-        let presentation = model.presentation
-
-        return VStack(alignment: .leading, spacing: 16) {
-            if let microphone = presentation.microphonePermission {
+        VStack(alignment: .leading, spacing: 16) {
+            switch model.state.permissions.microphone {
+            case .notDetermined:
                 permissionRow(
                     title: "Microphone",
-                    detail: microphone.detail,
-                    primaryAction: microphone.primaryAction,
-                    secondaryAction: microphone.secondaryAction
-                )
+                    detail: "Grant microphone access so Cue can record your speech."
+                ) {
+                    Button("Grant Microphone Access") {
+                        Task {
+                            await model.requestMicrophonePermission()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(CueTheme.accent)
+                }
+            case .denied:
+                permissionRow(
+                    title: "Microphone",
+                    detail: "Microphone access is blocked. Open System Settings to allow Cue to record."
+                ) {
+                    Button("Open Microphone Settings") {
+                        model.openMicrophoneSettings()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(CueTheme.accent)
+                }
+            case .granted:
+                EmptyView()
             }
 
-            if let accessibility = presentation.accessibilityPermission {
+            if !model.state.permissions.isAccessibilityReady {
                 permissionRow(
                     title: "Accessibility",
-                    detail: accessibility.detail,
-                    primaryAction: accessibility.primaryAction,
-                    secondaryAction: accessibility.secondaryAction
-                )
+                    detail: "Grant Accessibility permission so Cue can paste automatically into the focused app."
+                ) {
+                    Button("Grant Accessibility Access") {
+                        model.requestAccessibilityPermission()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(CueTheme.accent)
+
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
     }
 
-    private func permissionRow(
+    private func permissionRow<Actions: View>(
         title: String,
         detail: String,
-        primaryAction: CueAppAction,
-        secondaryAction: CueAppAction?
+        @ViewBuilder actions: () -> Actions
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -114,18 +139,7 @@ struct CueMainWindowView: View {
                 .foregroundStyle(CueTheme.slate)
 
             HStack(spacing: 8) {
-                Button(primaryAction.title) {
-                    model.perform(primaryAction)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(CueTheme.accent)
-
-                if let secondaryAction {
-                    Button(secondaryAction.title) {
-                        model.perform(secondaryAction)
-                    }
-                    .buttonStyle(.bordered)
-                }
+                actions()
             }
         }
         .padding(CueTheme.cardPadding)
@@ -135,14 +149,17 @@ struct CueMainWindowView: View {
 
     private var readySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            primarySectionCard(title: "Push to Talk", accessibilityID: CueAccessibilityID.pushToTalkSection) {
+            sectionCard(
+                title: "Push to Talk",
+                titleFont: .system(.subheadline, design: .rounded).weight(.medium),
+                titleColor: CueTheme.ink
+            ) {
                 VStack(spacing: 0) {
                     KeyboardShortcuts.Recorder("Shortcut", name: .pushToTalk) { shortcut in
                         hotkeyManager.updateShortcutSummary(shortcut)
                     }
                 }
                 .accessibilityElement(children: .contain)
-                .accessibilityIdentifier(CueAccessibilityID.shortcutRecorder)
 
                 Text(
                     hotkeyManager.hasConfiguredShortcut
@@ -157,7 +174,11 @@ struct CueMainWindowView: View {
                 latencyMetricsCard(metrics)
             }
 
-            secondarySectionCard(title: "Diagnostics", accessibilityID: CueAccessibilityID.diagnosticsSection) {
+            sectionCard(
+                title: "Diagnostics",
+                titleFont: .system(.caption, design: .rounded).weight(.semibold),
+                titleColor: CueTheme.slate
+            ) {
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -178,7 +199,6 @@ struct CueMainWindowView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier(CueAccessibilityID.diagnosticsDisclosure)
                     .accessibilityValue(isDiagnosticsExpanded ? "Expanded" : "Collapsed")
 
                     if isDiagnosticsExpanded {
@@ -218,7 +238,11 @@ struct CueMainWindowView: View {
     }
 
     private func latencyMetricsCard(_ metrics: LatencyMetrics) -> some View {
-        secondarySectionCard(title: "Last Run") {
+        sectionCard(
+            title: "Last Run",
+            titleFont: .system(.caption, design: .rounded).weight(.semibold),
+            titleColor: CueTheme.slate
+        ) {
             VStack(alignment: .leading, spacing: 6) {
                 latencyRow(label: "press → ack", value: metrics.pressToAck)
                 latencyRow(label: "release → life", value: metrics.releaseToProofOfLife)
@@ -243,39 +267,10 @@ struct CueMainWindowView: View {
         }
     }
 
-    private func primarySectionCard<Content: View>(
-        title: String,
-        accessibilityID: String? = nil,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        sectionCard(
-            title: title,
-            titleFont: .system(.subheadline, design: .rounded).weight(.medium),
-            titleColor: CueTheme.ink,
-            accessibilityID: accessibilityID,
-            content: content
-        )
-    }
-
-    private func secondarySectionCard<Content: View>(
-        title: String,
-        accessibilityID: String? = nil,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        sectionCard(
-            title: title,
-            titleFont: .system(.caption, design: .rounded).weight(.semibold),
-            titleColor: CueTheme.slate,
-            accessibilityID: accessibilityID,
-            content: content
-        )
-    }
-
     private func sectionCard<Content: View>(
         title: String,
         titleFont: Font,
         titleColor: Color,
-        accessibilityID: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -289,7 +284,6 @@ struct CueMainWindowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
         .accessibilityElement(children: .contain)
-        .cueAccessibilityIdentifier(accessibilityID)
     }
 
     private var modelRetrySection: some View {
@@ -303,7 +297,9 @@ struct CueMainWindowView: View {
                 .foregroundStyle(CueTheme.slate)
 
             Button("Retry Model Preparation") {
-                model.perform(.retryModelPreparation)
+                Task {
+                    await model.retryModelPreparation()
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(CueTheme.accent)
@@ -327,16 +323,5 @@ struct CueMainWindowView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCardTinted(tintColor: CueTheme.errorInk.opacity(0.2), cornerRadius: CueTheme.errorCornerRadius)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func cueAccessibilityIdentifier(_ accessibilityID: String?) -> some View {
-        if let accessibilityID {
-            accessibilityIdentifier(accessibilityID)
-        } else {
-            self
-        }
     }
 }

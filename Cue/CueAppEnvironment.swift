@@ -7,14 +7,27 @@ struct CueAppEnvironment {
 
     @MainActor
     static func make() -> CueAppEnvironment {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains(CueAppConfiguration.uiTestingLaunchArgument) {
-            return makeUITesting()
-        }
-        #endif
-
-        let model = CueAppModel()
-        let hotkeyManager = CueHotkeyManager(appModel: model)
+        let defaults = UserDefaults.standard
+        let modelDirectory = CueAppConfiguration.modelDownloadDirectory()
+        let debugCaptureDirectory = CueAppConfiguration.debugCaptureRootDirectory()
+        let transcriptionService = WhisperKitTranscriptionService.live(
+            defaults: defaults,
+            modelDirectory: modelDirectory,
+            debugCaptureDirectory: debugCaptureDirectory
+        )
+        let model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: PasteboardInsertionService.live(),
+            permissionService: SystemPermissionService(),
+            soundService: SystemSoundService(),
+            defaults: defaults,
+            notificationCenter: .default,
+            debugCaptureDirectory: debugCaptureDirectory
+        )
+        let hotkeyManager = CueHotkeyManager(
+            appModel: model,
+            bindingService: LiveHotkeyBindingService()
+        )
         return CueAppEnvironment(model: model, hotkeyManager: hotkeyManager)
     }
 }

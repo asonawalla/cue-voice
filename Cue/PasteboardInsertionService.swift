@@ -46,16 +46,11 @@ struct CuePasteboardSnapshot {
     let items: [CuePasteboardItemSnapshot]
 }
 
-struct CuePasteboardOwnership {
-    let changeCount: Int
-    let token: String?
-}
-
 protocol CuePasteboardAccessing: AnyObject {
+    var changeCount: Int { get }
     func snapshotContents() throws -> CuePasteboardSnapshot
-    func replaceContents(with text: String, ownershipToken: String, sourceBundleIdentifier: String?) throws -> Int
-    func restoreContents(from snapshot: CuePasteboardSnapshot) throws -> Int
-    func currentOwnership() -> CuePasteboardOwnership
+    func replaceContents(with text: String, sourceBundleIdentifier: String?) throws -> Int
+    func restoreContents(from snapshot: CuePasteboardSnapshot) throws
 }
 
 protocol RawSystemPasteboardAccessing: AnyObject {
@@ -64,7 +59,6 @@ protocol RawSystemPasteboardAccessing: AnyObject {
     @discardableResult
     func clearContents() -> Int
     func writeItems(_ items: [NSPasteboardItem]) -> Bool
-    func string(forType type: NSPasteboard.PasteboardType) -> String?
 }
 
 protocol PasteCommandPosting {
@@ -80,24 +74,36 @@ final class PasteboardInsertionService: TextInsertionService {
     private let mainBundleIdentifier: String?
     private let pasteRestoreGracePeriod: TimeInterval
     private let sleepAfterPaste: @Sendable (TimeInterval) async -> Void
-    private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Insertion")
+    private let logger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Insertion")
 
     init(
-        applicationResolver: FrontmostApplicationResolving? = nil,
-        pasteboard: CuePasteboardAccessing? = nil,
-        pasteCommandPoster: PasteCommandPosting? = nil,
-        hasAccessibilityPermission: @escaping () -> Bool = { CGPreflightPostEventAccess() },
-        mainBundleIdentifier: String? = Bundle.main.bundleIdentifier,
-        pasteRestoreGracePeriod: TimeInterval = 0.2,
-        sleepAfterPaste: @escaping @Sendable (TimeInterval) async -> Void = cueDefaultPasteboardRestoreSleep
+        applicationResolver: FrontmostApplicationResolving,
+        pasteboard: CuePasteboardAccessing,
+        pasteCommandPoster: PasteCommandPosting,
+        hasAccessibilityPermission: @escaping () -> Bool,
+        mainBundleIdentifier: String?,
+        pasteRestoreGracePeriod: TimeInterval,
+        sleepAfterPaste: @escaping @Sendable (TimeInterval) async -> Void
     ) {
-        self.applicationResolver = applicationResolver ?? WorkspaceFrontmostApplicationResolver()
-        self.pasteboard = pasteboard ?? SystemPasteboardAccess()
-        self.pasteCommandPoster = pasteCommandPoster ?? CGEventPasteCommandPoster()
+        self.applicationResolver = applicationResolver
+        self.pasteboard = pasteboard
+        self.pasteCommandPoster = pasteCommandPoster
         self.hasAccessibilityPermission = hasAccessibilityPermission
         self.mainBundleIdentifier = mainBundleIdentifier
         self.pasteRestoreGracePeriod = pasteRestoreGracePeriod
         self.sleepAfterPaste = sleepAfterPaste
+    }
+
+    static func live() -> PasteboardInsertionService {
+        PasteboardInsertionService(
+            applicationResolver: WorkspaceFrontmostApplicationResolver(),
+            pasteboard: SystemPasteboardAccess(),
+            pasteCommandPoster: CGEventPasteCommandPoster(),
+            hasAccessibilityPermission: { CGPreflightPostEventAccess() },
+            mainBundleIdentifier: Bundle.main.bundleIdentifier,
+            pasteRestoreGracePeriod: 0.2,
+            sleepAfterPaste: cueDefaultPasteboardRestoreSleep
+        )
     }
 
     func insert(_ text: String) async throws -> CueInsertionResult {
@@ -121,13 +127,11 @@ final class PasteboardInsertionService: TextInsertionService {
             throw CueError.pasteFailed("Cue could not preserve the current clipboard contents.")
         }
 
-        let ownershipToken = UUID().uuidString
         let cueChangeCount: Int
 
         do {
             cueChangeCount = try pasteboard.replaceContents(
                 with: text,
-                ownershipToken: ownershipToken,
                 sourceBundleIdentifier: mainBundleIdentifier
             )
         } catch {
@@ -147,7 +151,6 @@ final class PasteboardInsertionService: TextInsertionService {
 
             let restoreState = restoreClipboardIfOwned(
                 from: clipboardSnapshot,
-                expectedOwnershipToken: ownershipToken,
                 expectedChangeCount: cueChangeCount
             )
             logClipboardRestoreState(
@@ -168,7 +171,6 @@ final class PasteboardInsertionService: TextInsertionService {
 
         let restoreState = restoreClipboardIfOwned(
             from: clipboardSnapshot,
-            expectedOwnershipToken: ownershipToken,
             expectedChangeCount: cueChangeCount
         )
         let pasteDuration = Date().timeIntervalSince(insertionStartedAt)
@@ -199,17 +201,14 @@ final class PasteboardInsertionService: TextInsertionService {
 
     private func restoreClipboardIfOwned(
         from snapshot: CuePasteboardSnapshot,
-        expectedOwnershipToken: String,
         expectedChangeCount: Int
     ) -> ClipboardRestoreState {
-        let ownership = pasteboard.currentOwnership()
-
-        guard ownership.changeCount == expectedChangeCount, ownership.token == expectedOwnershipToken else {
+        guard pasteboard.changeCount == expectedChangeCount else {
             return .skippedClipboardChanged
         }
 
         do {
-            _ = try pasteboard.restoreContents(from: snapshot)
+            try pasteboard.restoreContents(from: snapshot)
             return .restored
         } catch {
             logger.error("Failed to restore the previous clipboard contents: \(error.localizedDescription, privacy: .public)")
@@ -266,7 +265,6 @@ extension NSPasteboard: RawSystemPasteboardAccessing {
 }
 
 final class SystemPasteboardAccess: CuePasteboardAccessing {
-    private static let ownershipTokenType = NSPasteboard.PasteboardType("dev.sonawalla.Cue.pasteToken")
     private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
     private static let autoGeneratedType = NSPasteboard.PasteboardType("org.nspasteboard.AutoGeneratedType")
     private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
@@ -275,6 +273,10 @@ final class SystemPasteboardAccess: CuePasteboardAccessing {
 
     init(pasteboard: RawSystemPasteboardAccessing = NSPasteboard.general) {
         self.pasteboard = pasteboard
+    }
+
+    var changeCount: Int {
+        pasteboard.changeCount
     }
 
     func snapshotContents() throws -> CuePasteboardSnapshot {
@@ -301,7 +303,7 @@ final class SystemPasteboardAccess: CuePasteboardAccessing {
         return CuePasteboardSnapshot(items: snapshotItems)
     }
 
-    func replaceContents(with text: String, ownershipToken: String, sourceBundleIdentifier: String?) throws -> Int {
+    func replaceContents(with text: String, sourceBundleIdentifier: String?) throws -> Int {
         let rollbackSnapshot = try? snapshotContents()
         let pasteboardItem = NSPasteboardItem()
 
@@ -317,10 +319,6 @@ final class SystemPasteboardAccess: CuePasteboardAccessing {
             throw CueError.pasteFailed("Cue could not mark the transcript as auto-generated on the system pasteboard.")
         }
 
-        guard pasteboardItem.setString(ownershipToken, forType: Self.ownershipTokenType) else {
-            throw CueError.pasteFailed("Cue could not track pasteboard ownership for this paste.")
-        }
-
         if let sourceBundleIdentifier,
            !pasteboardItem.setString(sourceBundleIdentifier, forType: Self.sourceType) {
             throw CueError.pasteFailed("Cue could not mark the pasteboard source for this paste.")
@@ -333,11 +331,11 @@ final class SystemPasteboardAccess: CuePasteboardAccessing {
         )
     }
 
-    func restoreContents(from snapshot: CuePasteboardSnapshot) throws -> Int {
+    func restoreContents(from snapshot: CuePasteboardSnapshot) throws {
         let rollbackSnapshot = try? snapshotContents()
         let itemsToRestore = try buildPasteboardItems(from: snapshot)
 
-        return try writePreparedItems(
+        _ = try writePreparedItems(
             itemsToRestore,
             rollbackSnapshot: rollbackSnapshot,
             failureMessage: "Cue could not restore the previous clipboard contents."
@@ -400,18 +398,6 @@ final class SystemPasteboardAccess: CuePasteboardAccessing {
 
         pasteboard.clearContents()
         _ = pasteboard.writeItems(rollbackItems)
-    }
-
-    func currentOwnership() -> CuePasteboardOwnership {
-        let initialChangeCount = pasteboard.changeCount
-        let token = pasteboard.string(forType: Self.ownershipTokenType)
-        let finalChangeCount = pasteboard.changeCount
-
-        if initialChangeCount != finalChangeCount {
-            return CuePasteboardOwnership(changeCount: finalChangeCount, token: nil)
-        }
-
-        return CuePasteboardOwnership(changeCount: finalChangeCount, token: token)
     }
 }
 

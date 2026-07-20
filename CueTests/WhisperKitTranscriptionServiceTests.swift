@@ -5,62 +5,48 @@ import Testing
 @MainActor
 struct WhisperKitTranscriptionServiceTests {
     @Test func prepareModelUsesCachedPathWithoutDownloading() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let cachedModelFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let rig = WhisperKitServiceTestRig()
+        let cachedModelFolder = rig.downloadedModelFolder()
         try FileManager.default.createDirectory(at: cachedModelFolder, withIntermediateDirectories: true)
-        defaults.set(cachedModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
+        rig.defaults.set(cachedModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
 
         let factory = FakeWhisperKitClientFactory(downloadResult: cachedModelFolder)
-        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        let service = rig.makeService(factory: factory)
         var statuses: [ModelPreparationStatus] = []
-        service.statusHandler = { statuses.append($0) }
 
-        try await service.prepareModel()
+        try await service.prepareModel { statuses.append($0) }
 
         #expect(factory.downloadCallCount == 0)
         #expect(factory.makeClientCallCount == 1)
-        #expect(statuses == [.checkingCache, .loading, .ready])
+        #expect(statuses == [.checkingCache, .loading])
     }
 
     @Test func prepareModelUsesCurrentHardcodedModelForDownloadAndLoad() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let modelFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
-        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
-        try await service.prepareModel()
+        try await service.prepareModel { _ in }
 
         #expect(factory.downloadCallCount == 1)
         #expect(factory.downloadedVariants == [CueAppConfiguration.modelID])
         #expect(factory.makeClientModelIDs == [CueAppConfiguration.modelID])
-        #expect(defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == modelFolder.path)
+        #expect(rig.defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == modelFolder.path)
     }
 
     @Test func prepareModelIgnoresProgressCallbacksAfterDownloadFinishes() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let modelFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
         factory.progressToReportDuringDownload = nil
-        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        let service = rig.makeService(factory: factory)
         var statuses: [ModelPreparationStatus] = []
-        service.statusHandler = { statuses.append($0) }
 
-        try await service.prepareModel()
+        try await service.prepareModel { statuses.append($0) }
 
         let terminalStatuses = statuses
-        #expect(terminalStatuses == [.checkingCache, .downloading(progress: nil), .loading, .ready])
+        #expect(terminalStatuses == [.checkingCache, .downloading(progress: nil), .loading])
 
         factory.capturedProgressHandler?(0.75)
         try await Task.sleep(nanoseconds: 10_000_000)
@@ -69,51 +55,49 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func prepareModelIgnoresCachedPathForPreviousModelVariant() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let staleModelFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("openai_whisper-base.en")
+        let rig = WhisperKitServiceTestRig()
+        let staleModelFolder = rig.rootDirectory.appendingPathComponent("openai_whisper-base.en")
         try FileManager.default.createDirectory(at: staleModelFolder, withIntermediateDirectories: true)
-        defaults.set(staleModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
+        rig.defaults.set(staleModelFolder.path, forKey: CueAppConfiguration.cachedModelPathDefaultsKey)
 
-        let currentModelFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent(CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID))
+        let currentModelFolder = rig.downloadedModelFolder()
         let factory = FakeWhisperKitClientFactory(downloadResult: currentModelFolder)
-        let service = WhisperKitTranscriptionService(defaults: defaults, clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
-        try await service.prepareModel()
+        try await service.prepareModel { _ in }
 
         #expect(factory.downloadCallCount == 1)
         #expect(factory.downloadedVariants == [CueAppConfiguration.modelID])
         #expect(factory.makeClientModelIDs == [CueAppConfiguration.modelID])
-        #expect(defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == currentModelFolder.path)
+        #expect(rig.defaults.string(forKey: CueAppConfiguration.cachedModelPathDefaultsKey) == currentModelFolder.path)
     }
 
     @Test func prepareModelReportsLoadFailuresSeparatelyFromDownloadFailures() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
         factory.makeClientError = NSError(domain: "CueTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "bad weights"])
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
         await #expect(throws: CueError.modelLoadFailed("bad weights")) {
-            try await service.prepareModel()
+            try await service.prepareModel { _ in }
         }
     }
 
     @Test func stopRecordingBuildsResultFromClientSegments() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.transcriptions = [
             WhisperKitTranscriptionSegment(text: "hello ", language: "en", modelLoadDuration: 0.2, pipelineDuration: 0.4),
             WhisperKitTranscriptionSegment(text: "world", language: "en", modelLoadDuration: 0.4, pipelineDuration: 0.6)
         ]
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
-        let result = try await service.stopRecording()
+        let result = try await service.stopRecording(saveDebugCapture: false)
 
         #expect(client.startRecordingCallCount == 1)
         #expect(client.stopRecordingCallCount == 1)
@@ -121,42 +105,48 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingRejectsWhitespaceOnlyTranscript() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.transcriptions = [
             WhisperKitTranscriptionSegment(text: "   ", language: "en", modelLoadDuration: 0.1, pipelineDuration: 0.2)
         ]
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         await #expect(throws: CueError.emptyTranscript) {
-            try await service.stopRecording()
+            try await service.stopRecording(saveDebugCapture: false)
         }
     }
 
     @Test func stopRecordingRejectsBlankAudioSentinelTranscript() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.transcriptions = [
             WhisperKitTranscriptionSegment(text: "[BLANK_AUDIO]", language: "en", modelLoadDuration: 0.1, pipelineDuration: 0.2)
         ]
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         await #expect(throws: CueError.emptyTranscript) {
-            try await service.stopRecording()
+            try await service.stopRecording(saveDebugCapture: false)
         }
     }
 
     @Test func startRecordingRejectsASecondConcurrentRecording() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         await #expect(throws: CueError.recordingAlreadyInProgress) {
@@ -165,16 +155,18 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingRejectsClipsShorterThanMinimumDuration() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.audioSamples = Array(repeating: Float(0), count: 1_000)
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         do {
-            _ = try await service.stopRecording()
+            _ = try await service.stopRecording(saveDebugCapture: false)
             #expect(Bool(false), "Expected recordingTooShort error")
         } catch let error as CueError {
             guard case .recordingTooShort(let actual, let minimum) = error else {
@@ -188,7 +180,8 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingMapsUnexpectedTranscriptionErrors() async throws {
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.transcribeError = NSError(
             domain: "CueTests",
@@ -196,18 +189,18 @@ struct WhisperKitTranscriptionServiceTests {
             userInfo: [NSLocalizedDescriptionKey: "decoder offline"]
         )
         let factory = FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
-        let service = WhisperKitTranscriptionService(clientFactory: factory)
+        let service = rig.makeService(factory: factory)
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         await #expect(throws: CueError.transcriptionFailed("decoder offline")) {
-            try await service.stopRecording()
+            try await service.stopRecording(saveDebugCapture: false)
         }
     }
 
     @Test func debugCaptureStoreUsesInjectedDateUUIDAndTimeZoneForCapturePath() async throws {
-        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: captureRoot) }
+        let rig = WhisperKitServiceTestRig()
 
         let timeZone = try #require(TimeZone(secondsFromGMT: 0))
         let fixedDate = try #require(DateComponents(
@@ -223,13 +216,13 @@ struct WhisperKitTranscriptionServiceTests {
         ).date)
         let fixedUUID = try #require(UUID(uuidString: "12345678-1234-5678-1234-567812345678"))
         let store = DebugCaptureStore(
-            rootDirectory: captureRoot,
+            rootDirectory: rig.debugCaptureDirectory,
             dateProvider: { fixedDate },
             uuidProvider: { fixedUUID },
             timeZone: timeZone
         )
 
-        let capture = try await store.createCapture(audioSamples: [0])
+        let capture = try store.createCapture(audioSamples: [0])
 
         let expectedCaptureID = "2026-05-04T12-34-56.789Z-12345678-1234-5678-1234-567812345678"
         #expect(capture.lastPathComponent == expectedCaptureID)
@@ -238,13 +231,12 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func debugCaptureStoreWritesTypedResultJSON() async throws {
-        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: captureRoot) }
+        let rig = WhisperKitServiceTestRig()
 
-        let store = DebugCaptureStore(rootDirectory: captureRoot)
-        let capture = try await store.createCapture(audioSamples: [0])
+        let store = DebugCaptureStore(rootDirectory: rig.debugCaptureDirectory)
+        let capture = try store.createCapture(audioSamples: [0])
 
-        try await store.saveResult(
+        try store.saveResult(
             for: capture,
             sampleCount: 1,
             recordingDuration: 1.5,
@@ -269,7 +261,7 @@ struct WhisperKitTranscriptionServiceTests {
         #expect(document.finalTranscript == "hello")
         #expect(document.errorMessage == nil)
         #expect(document.rawSegments == [
-            DebugCaptureResultSegment(
+            WhisperKitTranscriptionSegment(
                 text: "hello",
                 language: "en",
                 modelLoadDuration: 0.25,
@@ -279,12 +271,11 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func debugCaptureStoreUsesInjectedSampleRateInWAVHeader() async throws {
-        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: captureRoot) }
+        let rig = WhisperKitServiceTestRig()
 
-        let store = DebugCaptureStore(rootDirectory: captureRoot, sampleRate: 22_050)
+        let store = DebugCaptureStore(rootDirectory: rig.debugCaptureDirectory, sampleRate: 22_050)
 
-        let capture = try await store.createCapture(audioSamples: [0, 0.5])
+        let capture = try store.createCapture(audioSamples: [0, 0.5])
         let wavData = try Data(contentsOf: capture.appendingPathComponent("clip.wav"))
 
         #expect(littleEndianUInt32(in: wavData, at: 24) == 22_050)
@@ -292,32 +283,26 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingSavesDebugCaptureArtifactsWhenEnabled() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
-
-        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
         client.transcriptions = [
             WhisperKitTranscriptionSegment(text: "hello world", language: "en", modelLoadDuration: 0.2, pipelineDuration: 0.4)
         ]
 
-        let service = WhisperKitTranscriptionService(
-            defaults: defaults,
-            clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
-            debugCaptureStore: DebugCaptureStore(rootDirectory: captureRoot)
+        let service = rig.makeService(
+            factory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
         )
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
-        let result = try await service.stopRecording()
+        let result = try await service.stopRecording(saveDebugCapture: true)
 
         #expect(result == "hello world")
 
         let captureFolders = try FileManager.default.contentsOfDirectory(
-            at: captureRoot,
+            at: rig.debugCaptureDirectory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         )
@@ -348,13 +333,8 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingSavesDebugCaptureErrorArtifactsWhenTranscriptionFails() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
-
-        let captureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
         client.transcribeError = NSError(
@@ -363,19 +343,18 @@ struct WhisperKitTranscriptionServiceTests {
             userInfo: [NSLocalizedDescriptionKey: "decoder offline"]
         )
 
-        let service = WhisperKitTranscriptionService(
-            defaults: defaults,
-            clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
-            debugCaptureStore: DebugCaptureStore(rootDirectory: captureRoot)
+        let service = rig.makeService(
+            factory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client)
         )
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
 
         await #expect(throws: CueError.transcriptionFailed("decoder offline")) {
-            try await service.stopRecording()
+            try await service.stopRecording(saveDebugCapture: true)
         }
 
-        let dayFolder = try #require(try firstDirectory(at: captureRoot))
+        let dayFolder = try #require(try firstDirectory(at: rig.debugCaptureDirectory))
         let captureFolder = try #require(try firstDirectory(at: dayFolder))
         let resultData = try Data(contentsOf: captureFolder.appendingPathComponent("result.json"))
         let document = try JSONDecoder().decode(DebugCaptureResultDocument.self, from: resultData)
@@ -386,25 +365,66 @@ struct WhisperKitTranscriptionServiceTests {
     }
 
     @Test func stopRecordingIgnoresDebugCaptureWriteFailures() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
-
-        let modelFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let rig = WhisperKitServiceTestRig()
+        let modelFolder = rig.downloadedModelFolder()
         let client = FakeWhisperKitClient()
         client.audioSamples = Array(repeating: Float(0.25), count: 32_000)
 
         let service = WhisperKitTranscriptionService(
-            defaults: defaults,
+            defaults: rig.defaults,
+            modelDirectory: rig.modelDirectory,
             clientFactory: FakeWhisperKitClientFactory(downloadResult: modelFolder, client: client),
             debugCaptureStore: FailingDebugCaptureStore()
         )
 
+        try await service.prepareModel { _ in }
         try await service.startRecording()
-        let result = try await service.stopRecording()
+        let result = try await service.stopRecording(saveDebugCapture: true)
 
         #expect(result == "hello")
+    }
+}
+
+private final class WhisperKitServiceTestRig {
+    let rootDirectory: URL
+    let modelDirectory: URL
+    let debugCaptureDirectory: URL
+    let defaults: UserDefaults
+
+    private let defaultsSuiteName: String
+
+    init() {
+        let identifier = UUID().uuidString
+        defaultsSuiteName = "CueWhisperTests.\(identifier)"
+        defaults = UserDefaults(suiteName: defaultsSuiteName)!
+        rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(defaultsSuiteName, isDirectory: true)
+        modelDirectory = rootDirectory.appendingPathComponent("Models", isDirectory: true)
+        debugCaptureDirectory = rootDirectory.appendingPathComponent("DebugCaptures", isDirectory: true)
+    }
+
+    func downloadedModelFolder() -> URL {
+        rootDirectory.appendingPathComponent(
+            CueAppConfiguration.expectedDownloadedModelFolderName(for: CueAppConfiguration.modelID),
+            isDirectory: true
+        )
+    }
+
+    func makeService(
+        factory: any WhisperKitClientFactory,
+        debugCaptureStore: (any DebugCaptureStoring)? = nil
+    ) -> WhisperKitTranscriptionService {
+        WhisperKitTranscriptionService(
+            defaults: defaults,
+            modelDirectory: modelDirectory,
+            clientFactory: factory,
+            debugCaptureStore: debugCaptureStore ?? DebugCaptureStore(rootDirectory: debugCaptureDirectory)
+        )
+    }
+
+    deinit {
+        defaults.removePersistentDomain(forName: defaultsSuiteName)
+        try? FileManager.default.removeItem(at: rootDirectory)
     }
 }
 
@@ -414,7 +434,6 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
     var downloadedVariants: [String] = []
     var makeClientModelIDs: [String] = []
     var downloadResult: URL
-    var downloadError: Error?
     var makeClientError: Error?
     var client: FakeWhisperKitClient
     var progressToReportDuringDownload: Double? = 0.5
@@ -437,10 +456,6 @@ private final class FakeWhisperKitClientFactory: WhisperKitClientFactory {
 
         if let progressToReportDuringDownload {
             onProgress(progressToReportDuringDownload)
-        }
-
-        if let downloadError {
-            throw downloadError
         }
 
         return downloadResult
@@ -471,15 +486,10 @@ private final class FakeWhisperKitClient: WhisperKitClient {
     ]
     var startRecordingCallCount = 0
     var stopRecordingCallCount = 0
-    var startRecordingError: Error?
     var transcribeError: Error?
 
     func startRecording() throws {
         startRecordingCallCount += 1
-
-        if let startRecordingError {
-            throw startRecordingError
-        }
     }
 
     func stopRecording() {
@@ -498,7 +508,7 @@ private final class FakeWhisperKitClient: WhisperKitClient {
 }
 
 private final class FailingDebugCaptureStore: DebugCaptureStoring {
-    func createCapture(audioSamples: [Float]) async throws -> URL {
+    func createCapture(audioSamples: [Float]) throws -> URL {
         _ = audioSamples
         throw NSError(domain: "CueTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "disk full"])
     }
@@ -510,7 +520,7 @@ private final class FailingDebugCaptureStore: DebugCaptureStoring {
         segments: [WhisperKitTranscriptionSegment],
         finalTranscript: String,
         errorMessage: String?
-    ) async throws {
+    ) throws {
         _ = capture
         _ = sampleCount
         _ = recordingDuration

@@ -47,16 +47,6 @@
                ReferencedContainer = "container:Cue.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "05A71CA92F5A93C4009A5F0F"
-               BuildableName = "CueUITests.xctest"
-               BlueprintName = "CueUITests"
-               ReferencedContainer = "container:Cue.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

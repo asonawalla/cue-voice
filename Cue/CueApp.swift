@@ -42,11 +42,11 @@ private struct CueMenuBarMenuView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let presentation = model.presentation
+        let status = model.presentation.status
 
-        Text(presentation.menuBarPrimaryStatus)
+        Text(status.primary)
 
-        if let secondaryStatus = presentation.menuBarSecondaryStatus {
+        if let secondaryStatus = status.secondary {
             Text(secondaryStatus)
         }
 
@@ -56,7 +56,6 @@ private struct CueMenuBarMenuView: View {
             openWindow(id: cueMainWindowID)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
-        .accessibilityIdentifier(CueAccessibilityID.openCueMenuItem)
 
         Divider()
 
@@ -70,10 +69,9 @@ private struct CueMenuBarLabelView: View {
     @Bindable var model: CueAppModel
 
     var body: some View {
-        let presentation = model.presentation
+        let status = model.presentation.status
 
-        Image(systemName: presentation.menuBarSymbolName)
-            .accessibilityLabel(presentation.menuBarPrimaryStatus)
-            .accessibilityIdentifier(CueAccessibilityID.menuBarTrigger)
+        Image(systemName: status.symbolName)
+            .accessibilityLabel(status.primary)
     }
 }

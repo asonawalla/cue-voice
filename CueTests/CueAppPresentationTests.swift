@@ -3,7 +3,7 @@ import Testing
 
 @MainActor
 struct CueAppPresentationTests {
-    @Test func accessibilityRequiredPresentationShowsSetupPrompt() {
+    @Test func accessibilityRequiredPresentationShowsSetupStatus() {
         var state = CueAppState(
             permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
@@ -12,15 +12,15 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(presentation.needsPermissionPrompt)
-        #expect(presentation.accessibilityPermission?.primaryAction == .requestAccessibilityPermission)
-        #expect(presentation.accessibilityPermission?.secondaryAction == .openAccessibilitySettings)
+        #expect(presentation.status.primary == "Accessibility Required")
+        #expect(presentation.status.symbolName == "waveform.badge.exclamationmark")
     }
 
     @Test func failedModelPreparationPresentationOffersRetryAction() {
         var state = CueAppState(
             permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
-        state.modelStatus = .failed("Model load failed")
+        state.modelStatus = .failed
 
         let presentation = CueAppPresentation(state: state)
 
@@ -32,7 +32,7 @@ struct CueAppPresentationTests {
             permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
         )
         state.modelStatus = .ready
-        state.session = .failed(CueFailure.from(CueError.emptyTranscript))
+        state.session = .failed(.emptyTranscript)
 
         let presentation = CueAppPresentation(state: state)
 
@@ -48,7 +48,7 @@ struct CueAppPresentationTests {
         let presentation = CueAppPresentation(state: state)
 
         #expect(!presentation.needsPermissionPrompt)
-        #expect(presentation.menuBarPrimaryStatus == "Ready")
-        #expect(presentation.menuBarSecondaryStatus == nil)
+        #expect(presentation.status.primary == "Ready")
+        #expect(presentation.status.secondary == nil)
     }
 }

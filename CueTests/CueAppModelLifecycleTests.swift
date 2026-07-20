@@ -5,138 +5,81 @@ import Testing
 
 @MainActor
 struct CueAppModelLifecycleTests {
-    @Test func launchWithGrantedPermissionsWarmsTheModelWithoutLeavingIdle() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService()
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
+    @Test func launchWithGrantedPermissionsWarmsTheModelWithoutLeavingIdle() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
 
         await model.launch()
 
-        #expect(transcriptionService.prepareCallCount == 1)
+        #expect(rig.transcriptionService.prepareCallCount == 1)
         #expect(model.state.session == .idle)
         #expect(model.state.permissions.isFullyConfigured)
         #expect(model.state.modelStatus.isReady)
         #expect(!model.presentation.needsPermissionPrompt)
         #expect(model.presentation.errorMessage == nil)
-        #expect(insertionService.insertCallCount == 0)
+        #expect(rig.insertionService.insertCallCount == 0)
     }
 
-    @Test func launchWithMissingMicrophoneSkipsModelWarmupAndStaysIdle() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .notGranted)
+    @Test func launchWithMissingMicrophoneSkipsModelWarmupAndStaysIdle() async {
+        let rig = CueAppModelTestRig(
+            permissions: CuePermissionSnapshot(microphone: .notDetermined, accessibility: .notGranted)
         )
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
+        let model = rig.model
 
         await model.launch()
 
         #expect(!model.state.permissions.isFullyConfigured)
-        #expect(transcriptionService.prepareCallCount == 0)
+        #expect(rig.transcriptionService.prepareCallCount == 0)
         #expect(model.state.session == .idle)
         #expect(model.presentation.needsPermissionPrompt)
     }
 
-    @Test func launchWithMissingAccessibilitySkipsModelWarmupAndNeedsSetupPrompt() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
+    @Test func launchWithMissingAccessibilitySkipsModelWarmupAndNeedsSetupPrompt() async {
+        let rig = CueAppModelTestRig(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: NotificationCenter()
-        )
+        let model = rig.model
 
         await model.launch()
 
         #expect(!model.state.permissions.isFullyConfigured)
-        #expect(transcriptionService.prepareCallCount == 0)
+        #expect(rig.transcriptionService.prepareCallCount == 0)
         #expect(model.state.session == .idle)
         #expect(model.presentation.needsPermissionPrompt)
-        #expect(model.presentation.menuBarPrimaryStatus == "Accessibility Required")
+        #expect(model.presentation.status.primary == "Accessibility Required")
     }
 
-    @Test func becomingActiveRefreshesPermissionsAndWarmsModel() async throws {
-        let transcriptionService = FakeTranscriptionService()
-        let insertionService = FakeTextInsertionService()
-        let permissionService = FakePermissionService(
-            snapshot: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
+    @Test func becomingActiveRefreshesPermissionsAndWarmsModel() async {
+        let rig = CueAppModelTestRig(
+            permissions: CuePermissionSnapshot(microphone: .granted, accessibility: .notGranted)
         )
-        let notificationCenter = NotificationCenter()
-        let model = CueAppModel(
-            transcriptionService: transcriptionService,
-            insertionService: insertionService,
-            permissionService: permissionService,
-            notificationCenter: notificationCenter
-        )
+        let model = rig.model
 
         await model.launch()
 
-        #expect(transcriptionService.prepareCallCount == 0)
+        #expect(rig.transcriptionService.prepareCallCount == 0)
         #expect(!model.state.permissions.isFullyConfigured)
 
-        permissionService.snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
-        notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+        rig.permissionService.snapshot = CuePermissionSnapshot(microphone: .granted, accessibility: .granted)
+        rig.notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
 
-        await yieldUntil { transcriptionService.prepareCallCount == 1 }
+        await yieldUntil { rig.transcriptionService.prepareCallCount == 1 }
 
         #expect(model.state.permissions.isFullyConfigured)
         #expect(model.state.modelStatus.isReady)
         #expect(model.state.session == .idle)
     }
 
-    @Test func debugCaptureTogglePersistsAcrossModelInstances() async throws {
-        let suiteName = UUID().uuidString
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let firstModel = CueAppModel(
-            transcriptionService: FakeTranscriptionService(),
-            insertionService: FakeTextInsertionService(),
-            permissionService: FakePermissionService(),
-            defaults: defaults,
-            notificationCenter: NotificationCenter()
-        )
+    @Test func debugCaptureTogglePersistsAcrossModelInstances() {
+        let rig = CueAppModelTestRig()
+        let firstModel = rig.model
 
         #expect(!firstModel.debugCapturesEnabled)
 
         firstModel.debugCapturesEnabled = true
 
-        let secondModel = CueAppModel(
-            transcriptionService: FakeTranscriptionService(),
-            insertionService: FakeTextInsertionService(),
-            permissionService: FakePermissionService(),
-            defaults: defaults,
-            notificationCenter: NotificationCenter()
-        )
+        let secondModel = rig.makeModel()
 
         #expect(secondModel.debugCapturesEnabled)
-    }
-
-    private func yieldUntil(
-        maxYields: Int = 20,
-        condition: @escaping @MainActor () -> Bool
-    ) async {
-        for _ in 0..<maxYields {
-            if condition() {
-                return
-            }
-
-            await Task.yield()
-        }
     }
 }
