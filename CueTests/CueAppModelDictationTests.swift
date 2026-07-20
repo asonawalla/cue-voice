@@ -42,6 +42,123 @@ struct CueAppModelDictationTests {
         #expect(rig.transcriptionService.lastSaveDebugCapture)
     }
 
+    @Test func enabledRecordingPillReplacesCumulativePreviewTextAtomically() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+        model.recordingPillEnabled = true
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+
+        let previewHandler = rig.transcriptionService.previewHandler
+        rig.transcriptionService.reportPreview("rough words still changing")
+
+        #expect(previewHandler != nil)
+        #expect(model.state.recordingPreviewText == "rough words still changing")
+        #expect(rig.defaults.bool(forKey: CueAppConfiguration.recordingPillEnabledDefaultsKey))
+
+        rig.transcriptionService.reportPreview("rough words now revised as a complete sentence")
+        #expect(model.state.recordingPreviewText == "rough words now revised as a complete sentence")
+
+        model.handlePushToTalkReleased()
+        await yieldUntil { model.state.session == .idle }
+
+        #expect(model.state.recordingPreviewText.isEmpty)
+
+        previewHandler?(.text("late preview from the previous run"))
+        #expect(model.state.recordingPreviewText.isEmpty)
+    }
+
+    @Test func recordingPillSurfacesAndRecoversFromUnavailableLivePreview() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+        model.recordingPillEnabled = true
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+
+        rig.transcriptionService.reportPreviewUnavailable()
+
+        #expect(model.state.isRecordingPreviewUnavailable)
+        #expect(model.state.recordingPreviewText.isEmpty)
+
+        rig.transcriptionService.reportPreview("preview recovered")
+
+        #expect(!model.state.isRecordingPreviewUnavailable)
+        #expect(model.state.recordingPreviewText == "preview recovered")
+    }
+
+    @Test func recordingPillKeepsUnavailableUpdateReportedBeforeRecordingStartReturns() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+        model.recordingPillEnabled = true
+        rig.transcriptionService.previewUpdateDuringStart = .unavailable
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+
+        #expect(model.state.isRecordingPreviewUnavailable)
+        #expect(model.state.recordingPreviewText.isEmpty)
+    }
+
+    @Test func disabledRecordingPillDoesNotRequestPreviewWork() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+
+        #expect(!model.recordingPillEnabled)
+        #expect(rig.transcriptionService.previewHandler == nil)
+    }
+
+    @Test func recordingPillCanBeHiddenDuringAnActiveRun() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+        model.recordingPillEnabled = true
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        rig.transcriptionService.reportPreview("private rough text")
+
+        model.recordingPillEnabled = false
+
+        #expect(!model.recordingPillEnabled)
+        #expect(model.state.recordingPreviewText.isEmpty)
+        await yieldUntil { rig.transcriptionService.disableRecordingPreviewCallCount == 1 }
+        rig.transcriptionService.reportPreview("late text after disabling")
+        #expect(model.state.recordingPreviewText.isEmpty)
+
+        model.handlePushToTalkReleased()
+        await yieldUntil { model.state.session == .idle }
+    }
+
+    @Test func releasingPushToTalkClearsRoughPreviewBeforeFinalTranscriptionCompletes() async {
+        let rig = CueAppModelTestRig()
+        let model = rig.model
+        model.recordingPillEnabled = true
+        rig.transcriptionService.suspendsStopRecording = true
+
+        await model.launch()
+        model.handlePushToTalkPressed()
+        await yieldUntil { model.state.session == .recording }
+        rig.transcriptionService.reportPreview("raw text that should disappear on release")
+
+        model.handlePushToTalkReleased()
+        await yieldUntil { rig.transcriptionService.stopRecordingCallCount == 1 }
+
+        #expect(model.state.session == .transcribing)
+        #expect(model.state.recordingPreviewText.isEmpty)
+
+        rig.transcriptionService.resumeStopRecording()
+        await yieldUntil { model.state.session == .idle }
+    }
+
     @Test func releaseWhileRecordingStartIsSuspendedStillStopsAndInserts() async {
         let rig = CueAppModelTestRig()
         rig.transcriptionService.suspendsStartRecording = true

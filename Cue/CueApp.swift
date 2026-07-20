@@ -7,16 +7,20 @@ private let cueMainWindowID = "cue.main-window"
 struct CueApp: App {
     @State private var model: CueAppModel
     @State private var hotkeyManager: CueHotkeyManager
+    private let recordingPillController: CueRecordingPillController
 
     init() {
         let environment = CueAppEnvironment.make()
         let model = environment.model
         let hotkeyManager = environment.hotkeyManager
+        let recordingPillController = CueRecordingPillController(model: model)
 
         _model = State(initialValue: model)
         _hotkeyManager = State(initialValue: hotkeyManager)
+        self.recordingPillController = recordingPillController
 
         Task { @MainActor in
+            recordingPillController.start()
             await model.launch()
         }
     }

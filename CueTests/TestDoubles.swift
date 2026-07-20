@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class FakeTranscriptionService: TranscriptionService {
     var prepareCallCount = 0
+    var disableRecordingPreviewCallCount = 0
     var startRecordingCallCount = 0
     var stopRecordingCallCount = 0
     var prepareError: Error?
@@ -13,6 +14,8 @@ final class FakeTranscriptionService: TranscriptionService {
     var suspendsStartRecording = false
     var suspendsStopRecording = false
     var lastSaveDebugCapture = false
+    var previewHandler: TranscriptionPreviewHandler?
+    var previewUpdateDuringStart: TranscriptionPreviewUpdate?
     private var prepareModelContinuation: CheckedContinuation<Void, Never>?
     private var startRecordingContinuation: CheckedContinuation<Void, Never>?
     private var stopRecordingContinuation: CheckedContinuation<Void, Never>?
@@ -42,8 +45,18 @@ final class FakeTranscriptionService: TranscriptionService {
     }
 
     @MainActor
-    func startRecording() async throws {
+    func disableRecordingPreview() async {
+        disableRecordingPreviewCallCount += 1
+        previewHandler = nil
+    }
+
+    @MainActor
+    func startRecording(reportPreview: TranscriptionPreviewHandler?) async throws {
         startRecordingCallCount += 1
+        previewHandler = reportPreview
+        if let previewUpdateDuringStart {
+            reportPreview?(previewUpdateDuringStart)
+        }
 
         if suspendsStartRecording {
             await withCheckedContinuation { continuation in
@@ -60,6 +73,14 @@ final class FakeTranscriptionService: TranscriptionService {
         let continuation = startRecordingContinuation
         startRecordingContinuation = nil
         continuation?.resume()
+    }
+
+    func reportPreview(_ text: String) {
+        previewHandler?(.text(text))
+    }
+
+    func reportPreviewUnavailable() {
+        previewHandler?(.unavailable)
     }
 
     @MainActor

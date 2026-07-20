@@ -12,6 +12,33 @@ final class CueAppModel {
             defaults.set(debugCapturesEnabled, forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey)
         }
     }
+    private var recordingPillPreference = false
+    var recordingPillEnabled: Bool {
+        get { recordingPillPreference }
+        set {
+            let hasActiveRun = currentRun != nil || state.session.isBusy
+            guard !hasActiveRun || !newValue else {
+                return
+            }
+
+            recordingPillPreference = newValue
+            defaults.set(newValue, forKey: CueAppConfiguration.recordingPillEnabledDefaultsKey)
+
+            if newValue {
+                let transcriptionService = self.transcriptionService
+                Task {
+                    await transcriptionService.prepareRecordingPreview()
+                }
+            } else {
+                state.recordingPreviewText = ""
+                state.isRecordingPreviewUnavailable = false
+                let transcriptionService = self.transcriptionService
+                Task {
+                    await transcriptionService.disableRecordingPreview()
+                }
+            }
+        }
+    }
 
     private let transcriptionService: TranscriptionService
     private let insertionService: TextInsertionService
@@ -45,6 +72,9 @@ final class CueAppModel {
         self.state = CueAppState(permissions: permissionService.currentPermissionSnapshot())
         self.debugCapturesEnabled = defaults.bool(
             forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey
+        )
+        self.recordingPillPreference = defaults.bool(
+            forKey: CueAppConfiguration.recordingPillEnabledDefaultsKey
         )
 
         activationObserver = notificationCenter.addObserver(
@@ -181,9 +211,41 @@ final class CueAppModel {
     }
 
     private func startRecording() async {
+        guard let runID = currentRun?.id else {
+            return
+        }
+
+        let reportPreview: TranscriptionPreviewHandler?
+        if recordingPillEnabled {
+            reportPreview = { [weak self] update in
+                guard let self,
+                      self.recordingPillEnabled,
+                      self.currentRun?.id == runID,
+                      self.state.session == .idle || self.state.session == .recording
+                else {
+                    return
+                }
+
+                switch update {
+                case .text(let text):
+                    self.state.recordingPreviewText = text
+                    self.state.isRecordingPreviewUnavailable = false
+                case .unavailable:
+                    self.state.recordingPreviewText = ""
+                    self.state.isRecordingPreviewUnavailable = true
+                }
+            }
+        } else {
+            reportPreview = nil
+        }
+
         do {
-            try await transcriptionService.startRecording()
+            try await transcriptionService.startRecording(reportPreview: reportPreview)
             state.session = .recording
+
+            if !recordingPillEnabled {
+                await transcriptionService.disableRecordingPreview()
+            }
 
             if currentRun?.releasedAt != nil {
                 await stopRecording()
@@ -234,6 +296,10 @@ final class CueAppModel {
             }
             state.modelStatus = .ready
 
+            if recordingPillEnabled {
+                await transcriptionService.prepareRecordingPreview()
+            }
+
             if let preparationFailure, state.currentFailure == preparationFailure {
                 state.session = .idle
             }
@@ -251,6 +317,8 @@ final class CueAppModel {
         currentRun?.proofOfLifeAt = Date()
         soundService.playRecordingStopped()
         state.session = .transcribing
+        state.recordingPreviewText = ""
+        state.isRecordingPreviewUnavailable = false
         state.latencyMetrics = nil
 
         do {
@@ -277,6 +345,8 @@ final class CueAppModel {
 
             state.latencyMetrics = metrics
             state.session = .idle
+            state.recordingPreviewText = ""
+            state.isRecordingPreviewUnavailable = false
             currentRun = nil
 
             dictationLogger.info(
@@ -290,6 +360,8 @@ final class CueAppModel {
 
     private func clearFailureForNewAttempt() {
         state.latencyMetrics = nil
+        state.recordingPreviewText = ""
+        state.isRecordingPreviewUnavailable = false
 
         if case .failed = state.session {
             state.session = .idle
@@ -304,11 +376,14 @@ final class CueAppModel {
         }
 
         state.session = .failed(cueError)
+        state.recordingPreviewText = ""
+        state.isRecordingPreviewUnavailable = false
         logger.error("\(CueCopy.errorMessage(for: cueError), privacy: .public)")
     }
 }
 
 private struct DictationRunTiming {
+    let id = UUID()
     let pressedAt: Date
     var ackAt: Date?
     var releasedAt: Date?

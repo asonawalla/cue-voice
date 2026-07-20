@@ -168,6 +168,22 @@ struct CueMainWindowView: View {
                 )
                 .font(.system(.caption, design: .rounded))
                 .foregroundStyle(CueTheme.slate)
+
+                Divider()
+                    .padding(.vertical, 2)
+
+                Toggle(isOn: $model.recordingPillEnabled) {
+                    Text("Floating Dictation Preview")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(CueTheme.ink)
+                }
+                .toggleStyle(.switch)
+                .disabled(model.state.session.isBusy && !model.recordingPillEnabled)
+
+                Text("Shows a small pill you can drag out of the way. It expands while recording with a temporary, unpolished transcript.")
+                    .font(.system(.caption2, design: .rounded))
+                    .foregroundStyle(CueTheme.slate)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let metrics = model.state.latencyMetrics {

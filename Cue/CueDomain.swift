@@ -161,6 +161,8 @@ struct CueAppState {
     var permissions: CuePermissionSnapshot
     var modelStatus: ModelPreparationStatus = .idle
     var session: CueSessionState = .idle
+    var recordingPreviewText = ""
+    var isRecordingPreviewUnavailable = false
     var latencyMetrics: LatencyMetrics? = nil
 
     var currentFailure: CueError? {
