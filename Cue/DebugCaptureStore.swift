@@ -2,7 +2,7 @@ import Foundation
 import WhisperKit
 
 nonisolated protocol DebugCaptureStoring: AnyObject {
-    func createCapture(audioSamples: [Float]) async throws -> URL
+    func createCapture(audioSamples: [Float]) throws -> URL
     func saveResult(
         for captureDirectory: URL,
         sampleCount: Int,
@@ -10,26 +10,19 @@ nonisolated protocol DebugCaptureStoring: AnyObject {
         segments: [WhisperKitTranscriptionSegment],
         finalTranscript: String,
         errorMessage: String?
-    ) async throws
+    ) throws
 }
 
 nonisolated struct DebugCaptureResultDocument: Codable, Sendable {
     let captureID: String
     let sampleCount: Int
     let recordingDuration: TimeInterval
-    let rawSegments: [DebugCaptureResultSegment]
+    let rawSegments: [WhisperKitTranscriptionSegment]
     let finalTranscript: String
     let errorMessage: String?
 }
 
-nonisolated struct DebugCaptureResultSegment: Codable, Equatable, Sendable {
-    let text: String
-    let language: String?
-    let modelLoadDuration: TimeInterval
-    let pipelineDuration: TimeInterval
-}
-
-actor DebugCaptureStore: DebugCaptureStoring {
+nonisolated final class DebugCaptureStore: DebugCaptureStoring {
     private let rootDirectory: URL
     private let dateProvider: @Sendable () -> Date
     private let uuidProvider: @Sendable () -> UUID
@@ -50,7 +43,7 @@ actor DebugCaptureStore: DebugCaptureStoring {
         self.sampleRate = sampleRate
     }
 
-    func createCapture(audioSamples: [Float]) async throws -> URL {
+    func createCapture(audioSamples: [Float]) throws -> URL {
         let now = dateProvider()
         let dayDirectory = rootDirectory.appendingPathComponent(
             Self.dayFolderName(for: now, timeZone: timeZone),
@@ -77,19 +70,12 @@ actor DebugCaptureStore: DebugCaptureStoring {
         segments: [WhisperKitTranscriptionSegment],
         finalTranscript: String,
         errorMessage: String?
-    ) async throws {
+    ) throws {
         let result = DebugCaptureResultDocument(
             captureID: captureDirectory.lastPathComponent,
             sampleCount: sampleCount,
             recordingDuration: recordingDuration,
-            rawSegments: segments.map {
-                DebugCaptureResultSegment(
-                    text: $0.text,
-                    language: $0.language,
-                    modelLoadDuration: $0.modelLoadDuration,
-                    pipelineDuration: $0.pipelineDuration
-                )
-            },
+            rawSegments: segments,
             finalTranscript: finalTranscript,
             errorMessage: errorMessage
         )

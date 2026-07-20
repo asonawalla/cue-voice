@@ -3,29 +3,42 @@ import Foundation
 
 @MainActor
 final class FakeTranscriptionService: TranscriptionService {
-    var statusHandler: TranscriptionStatusHandler?
-
     var prepareCallCount = 0
     var startRecordingCallCount = 0
     var stopRecordingCallCount = 0
     var prepareError: Error?
     var startRecordingError: Error?
     var stopRecordingError: Error?
+    var suspendsPrepareModel = false
     var suspendsStartRecording = false
     var suspendsStopRecording = false
+    var lastSaveDebugCapture = false
+    private var prepareModelContinuation: CheckedContinuation<Void, Never>?
     private var startRecordingContinuation: CheckedContinuation<Void, Never>?
     private var stopRecordingContinuation: CheckedContinuation<Void, Never>?
     var result = "milestone transcript"
 
     @MainActor
-    func prepareModel() async throws {
+    func prepareModel(reportStatus: @escaping TranscriptionStatusHandler) async throws {
         prepareCallCount += 1
+
+        if suspendsPrepareModel {
+            await withCheckedContinuation { continuation in
+                prepareModelContinuation = continuation
+            }
+        }
 
         if let prepareError {
             throw prepareError
         }
 
-        statusHandler?(.ready)
+        _ = reportStatus
+    }
+
+    func resumePrepareModel() {
+        let continuation = prepareModelContinuation
+        prepareModelContinuation = nil
+        continuation?.resume()
     }
 
     @MainActor
@@ -50,8 +63,9 @@ final class FakeTranscriptionService: TranscriptionService {
     }
 
     @MainActor
-    func stopRecording() async throws -> String {
+    func stopRecording(saveDebugCapture: Bool) async throws -> String {
         stopRecordingCallCount += 1
+        lastSaveDebugCapture = saveDebugCapture
 
         if suspendsStopRecording {
             await withCheckedContinuation { continuation in
@@ -78,10 +92,7 @@ final class FakeTextInsertionService: TextInsertionService {
     var insertCallCount = 0
     var insertedTexts: [String] = []
     var insertError: Error?
-    var result = CueInsertionResult(
-        pasteDuration: 0.12,
-        pasteCommandPostedAt: Date()
-    )
+    var pasteDuration: TimeInterval = 0.12
 
     func insert(_ text: String) async throws -> CueInsertionResult {
         insertCallCount += 1
@@ -91,7 +102,10 @@ final class FakeTextInsertionService: TextInsertionService {
             throw insertError
         }
 
-        return result
+        return CueInsertionResult(
+            pasteDuration: pasteDuration,
+            pasteCommandPostedAt: Date()
+        )
     }
 }
 
@@ -162,5 +176,89 @@ final class FakePlayableSound: PlayableSound {
     func stop() -> Bool {
         stopCallCount += 1
         return true
+    }
+}
+
+@MainActor
+final class CueAppModelTestRig {
+    let transcriptionService: FakeTranscriptionService
+    let insertionService: FakeTextInsertionService
+    let permissionService: FakePermissionService
+    let soundService: FakeSoundService
+    let defaults: UserDefaults
+    let notificationCenter: NotificationCenter
+    let debugCaptureDirectory: URL
+    let model: CueAppModel
+
+    private let defaultsSuiteName: String
+    private let temporaryRoot: URL
+
+    init(
+        permissions: CuePermissionSnapshot = CuePermissionSnapshot(
+            microphone: .granted,
+            accessibility: .granted
+        )
+    ) {
+        let defaultsSuiteName = "CueTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsSuiteName)!
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(defaultsSuiteName, isDirectory: true)
+        let debugCaptureDirectory = temporaryRoot
+            .appendingPathComponent("DebugCaptures", isDirectory: true)
+        let transcriptionService = FakeTranscriptionService()
+        let insertionService = FakeTextInsertionService()
+        let permissionService = FakePermissionService(snapshot: permissions)
+        let soundService = FakeSoundService()
+        let notificationCenter = NotificationCenter()
+
+        self.transcriptionService = transcriptionService
+        self.insertionService = insertionService
+        self.permissionService = permissionService
+        self.soundService = soundService
+        self.defaults = defaults
+        self.notificationCenter = notificationCenter
+        self.debugCaptureDirectory = debugCaptureDirectory
+        self.defaultsSuiteName = defaultsSuiteName
+        self.temporaryRoot = temporaryRoot
+        self.model = CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            soundService: soundService,
+            defaults: defaults,
+            notificationCenter: notificationCenter,
+            debugCaptureDirectory: debugCaptureDirectory
+        )
+    }
+
+    func makeModel() -> CueAppModel {
+        CueAppModel(
+            transcriptionService: transcriptionService,
+            insertionService: insertionService,
+            permissionService: permissionService,
+            soundService: soundService,
+            defaults: defaults,
+            notificationCenter: notificationCenter,
+            debugCaptureDirectory: debugCaptureDirectory
+        )
+    }
+
+    deinit {
+        defaults.removePersistentDomain(forName: defaultsSuiteName)
+        try? FileManager.default.removeItem(at: temporaryRoot)
+    }
+}
+
+@MainActor
+func yieldUntil(
+    maxYields: Int = 20,
+    condition: @escaping @MainActor () -> Bool
+) async {
+    for _ in 0..<maxYields {
+        if condition() {
+            return
+        }
+
+        await Task.yield()
     }
 }

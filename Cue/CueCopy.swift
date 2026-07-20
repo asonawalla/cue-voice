@@ -50,32 +50,8 @@ enum CueCopy {
             return "Loading \(modelName) model"
         case .ready:
             return "\(modelName) model ready"
-        case .failed(let message):
-            return message
-        }
-    }
-
-    static func sessionTitle(_ state: CueSessionState) -> String {
-        switch state {
-        case .idle:
-            return "Idle"
-        case .recording:
-            return "Recording"
-        case .transcribing:
-            return "Transcribing"
-        case .pasting:
-            return "Pasting"
         case .failed:
-            return "Error"
-        }
-    }
-
-    static func failureMessage(_ failure: CueFailure) -> String {
-        switch failure {
-        case .cue(let cueError):
-            return errorMessage(for: cueError)
-        case .message(let message):
-            return message
+            return "Model preparation failed"
         }
     }
 
@@ -117,6 +93,8 @@ enum CueCopy {
             return "Cue can only paste into another app. Focus the destination app, then try again."
         case .pasteFailed(let message):
             return "Cue could not paste the transcript: \(message)"
+        case .unexpected(let message):
+            return message
         }
     }
 }

@@ -58,7 +58,7 @@ enum ModelPreparationStatus: Equatable, Sendable {
     case downloading(progress: Double?)
     case loading
     case ready
-    case failed(String)
+    case failed
 
     var isPreparing: Bool {
         switch self {
@@ -117,15 +117,7 @@ enum CueError: Error, Equatable, Sendable {
     case noFrontmostApplication
     case cannotPasteIntoCue
     case pasteFailed(String)
-
-    var isModelPreparationRelated: Bool {
-        switch self {
-        case .modelDownloadFailed, .modelLoadFailed:
-            return true
-        default:
-            return false
-        }
-    }
+    case unexpected(String)
 
     var shouldPlayErrorSound: Bool {
         switch self {
@@ -140,7 +132,8 @@ enum CueError: Error, Equatable, Sendable {
                 .modelLoadFailed,
                 .emptyTranscript,
                 .noFrontmostApplication,
-                .cannotPasteIntoCue:
+                .cannotPasteIntoCue,
+                .unexpected:
             return false
         }
     }
@@ -152,7 +145,7 @@ enum CueSessionState: Equatable {
     case recording
     case transcribing
     case pasting
-    case failed(CueFailure)
+    case failed(CueError)
 
     var isBusy: Bool {
         switch self {
@@ -164,39 +157,18 @@ enum CueSessionState: Equatable {
     }
 }
 
-enum CueFailure: Equatable {
-    case cue(CueError)
-    case message(String)
-
-    static func from(_ error: Error) -> CueFailure {
-        if let cueError = error as? CueError {
-            return .cue(cueError)
-        }
-
-        return .message(error.localizedDescription)
-    }
-
-    var cueError: CueError? {
-        guard case .cue(let error) = self else {
-            return nil
-        }
-
-        return error
-    }
-}
-
 struct CueAppState {
     var permissions: CuePermissionSnapshot
     var modelStatus: ModelPreparationStatus = .idle
     var session: CueSessionState = .idle
     var latencyMetrics: LatencyMetrics? = nil
 
-    var currentFailure: CueFailure? {
-        guard case .failed(let failure) = session else {
+    var currentFailure: CueError? {
+        guard case .failed(let error) = session else {
             return nil
         }
 
-        return failure
+        return error
     }
 
 }

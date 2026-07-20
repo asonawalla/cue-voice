@@ -18,5 +18,5 @@ topics that interest me:
 
 1. The MacOS ecosystem. Making Cue awesome will require learning quite a bit
    about Mac development best practices.
-2. Fine-tuning language models. I think there's more performance leverage to be
-   had by fine-tuning a model rather than prompting an existing model.
+2. Fine-tuning language models, as a possible future experiment rather than part
+   of Cue's current product surface.

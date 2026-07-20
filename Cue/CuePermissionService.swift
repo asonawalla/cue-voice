@@ -15,7 +15,7 @@ protocol PermissionService: AnyObject {
 @MainActor
 final class SystemPermissionService: PermissionService {
     private let workspace: NSWorkspace
-    private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Permissions")
+    private let logger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Permissions")
 
     init(
         workspace: NSWorkspace = .shared

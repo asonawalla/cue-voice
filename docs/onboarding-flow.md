@@ -107,14 +107,13 @@ The user sees:
 Shown only when:
 
 - permissions are fully configured
-- the model is not ready
-- model preparation is not currently in progress
+- model preparation explicitly failed
 
 This state offers `Retry Model Preparation`.
 
-### 3. Ready state
+### 3. Main controls state
 
-Shown only when permissions are fully configured and the setup prompt is no longer needed.
+Shown while permissions are fully configured and model preparation has not failed. The header reports preparation progress; push-to-talk remains gated until the model is ready.
 
 The user sees:
 
@@ -163,7 +162,6 @@ Validation coverage:
 - `CueTests/CueAppModelPermissionTests.swift`
 - `CueTests/CueAppModelLifecycleTests.swift`
 - `CueTests/CueHotkeyManagerTests.swift`
-- `CueUITests/CueUITests.swift`
 
 ## Change Rule
 

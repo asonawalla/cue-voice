@@ -18,40 +18,34 @@ final class CueAppModel {
     private let permissionService: PermissionService
     private let soundService: any SoundService
     private let defaults: UserDefaults
-    private let setupLogger = Logger(subsystem: "dev.sonawalla.Cue", category: "Setup")
-    private let dictationLogger = Logger(subsystem: "dev.sonawalla.Cue", category: "Dictation")
+    private let debugCaptureDirectory: URL
+    private let setupLogger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Setup")
+    private let dictationLogger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Dictation")
 
     private var activationObserver: NSObjectProtocol?
     private var hasLaunched = false
-    private var isPreparingModel = false
     private var isRequestingMicrophonePermission = false
-    private var isPushToTalkHeld = false
     private var currentRun: DictationRunTiming?
 
     init(
-        transcriptionService: TranscriptionService? = nil,
-        insertionService: TextInsertionService? = nil,
-        permissionService: PermissionService? = nil,
-        soundService: (any SoundService)? = nil,
-        defaults: UserDefaults = .standard,
-        notificationCenter: NotificationCenter = .default
+        transcriptionService: TranscriptionService,
+        insertionService: TextInsertionService,
+        permissionService: PermissionService,
+        soundService: any SoundService,
+        defaults: UserDefaults,
+        notificationCenter: NotificationCenter,
+        debugCaptureDirectory: URL
     ) {
-        let transcriptionService = transcriptionService ?? WhisperKitTranscriptionService(defaults: defaults)
-        let permissionService = permissionService ?? SystemPermissionService()
-
         self.transcriptionService = transcriptionService
-        self.insertionService = insertionService ?? PasteboardInsertionService()
+        self.insertionService = insertionService
         self.permissionService = permissionService
-        self.soundService = soundService ?? SystemSoundService()
+        self.soundService = soundService
         self.defaults = defaults
+        self.debugCaptureDirectory = debugCaptureDirectory
         self.state = CueAppState(permissions: permissionService.currentPermissionSnapshot())
         self.debugCapturesEnabled = defaults.bool(
             forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey
         )
-
-        transcriptionService.statusHandler = { [weak self] status in
-            self?.state.modelStatus = status
-        }
 
         activationObserver = notificationCenter.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
@@ -113,6 +107,18 @@ final class CueAppModel {
         permissionService.openSystemSettings(for: .accessibility)
     }
 
+    func requestAccessibilityPermission() {
+        permissionService.requestAccessibilityPermission()
+    }
+
+    func openMicrophoneSettings() {
+        permissionService.openSystemSettings(for: .microphone)
+    }
+
+    func retryModelPreparation() async {
+        await warmModel()
+    }
+
     func handlePushToTalkPressed() {
         guard currentRun == nil, !state.session.isBusy else {
             return
@@ -150,7 +156,6 @@ final class CueAppModel {
             return
         }
 
-        isPushToTalkHeld = true
         currentRun = DictationRunTiming(pressedAt: Date())
         clearFailureForNewAttempt()
         currentRun?.ackAt = Date()
@@ -162,7 +167,6 @@ final class CueAppModel {
     }
 
     func handlePushToTalkReleased() {
-        isPushToTalkHeld = false
         if currentRun?.releasedAt == nil {
             currentRun?.releasedAt = Date()
         }
@@ -181,7 +185,7 @@ final class CueAppModel {
             try await transcriptionService.startRecording()
             state.session = .recording
 
-            if !isPushToTalkHeld {
+            if currentRun?.releasedAt != nil {
                 await stopRecording()
             }
         } catch {
@@ -191,72 +195,50 @@ final class CueAppModel {
     }
 
     func openDebugCapturesFolder() {
-        let directoryURL = CueAppConfiguration.debugCaptureRootDirectory()
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(directoryURL)
+        try? FileManager.default.createDirectory(at: debugCaptureDirectory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(debugCaptureDirectory)
     }
 
     func clearDebugCaptures() {
-        let directoryURL = CueAppConfiguration.debugCaptureRootDirectory()
-        guard FileManager.default.fileExists(atPath: directoryURL.path) else {
+        guard FileManager.default.fileExists(atPath: debugCaptureDirectory.path) else {
             return
         }
 
-        try? FileManager.default.removeItem(at: directoryURL)
-    }
-
-    func perform(_ action: CueAppAction) {
-        switch action {
-        case .requestMicrophonePermission:
-            Task {
-                await requestMicrophonePermission()
-            }
-        case .requestAccessibilityPermission:
-            permissionService.requestAccessibilityPermission()
-        case .openMicrophoneSettings:
-            permissionService.openSystemSettings(for: .microphone)
-        case .openAccessibilitySettings:
-            openAccessibilitySettings()
-        case .retryModelPreparation:
-            Task {
-                await warmModel()
-            }
-        }
+        try? FileManager.default.removeItem(at: debugCaptureDirectory)
     }
 
     private func refreshPermissionSnapshot() {
         let snapshot = permissionService.currentPermissionSnapshot()
         state.permissions = snapshot
 
-        if let cueError = state.currentFailure?.cueError, snapshot.resolves(cueError) {
+        if let currentFailure = state.currentFailure, snapshot.resolves(currentFailure) {
             state.session = .idle
         }
     }
 
     private func warmModel() async {
-        guard state.permissions.isFullyConfigured, !isPreparingModel else {
+        guard state.permissions.isFullyConfigured, !state.modelStatus.isPreparing else {
             return
         }
 
         guard !state.modelStatus.isReady else {
-            if state.currentFailure?.cueError?.isModelPreparationRelated == true {
-                state.session = .idle
-            }
             return
         }
 
-        isPreparingModel = true
-        defer {
-            isPreparingModel = false
-        }
+        let preparationFailure = state.modelStatus == .failed ? state.currentFailure : nil
+        state.modelStatus = .checkingCache
 
         do {
-            try await transcriptionService.prepareModel()
+            try await transcriptionService.prepareModel { [weak self] status in
+                self?.state.modelStatus = status
+            }
+            state.modelStatus = .ready
 
-            if state.currentFailure?.cueError?.isModelPreparationRelated == true {
+            if let preparationFailure, state.currentFailure == preparationFailure {
                 state.session = .idle
             }
         } catch {
+            state.modelStatus = .failed
             present(error, logger: setupLogger)
         }
     }
@@ -273,7 +255,9 @@ final class CueAppModel {
 
         do {
             let transcriptionStartedAt = Date()
-            let transcript = try await transcriptionService.stopRecording()
+            let transcript = try await transcriptionService.stopRecording(
+                saveDebugCapture: debugCapturesEnabled
+            )
             let transcriptionDuration = Date().timeIntervalSince(transcriptionStartedAt)
 
             state.session = .pasting
@@ -313,14 +297,14 @@ final class CueAppModel {
     }
 
     private func present(_ error: Error, logger: Logger) {
-        let failure = CueFailure.from(error)
+        let cueError = (error as? CueError) ?? .unexpected(error.localizedDescription)
 
-        if failure.cueError?.shouldPlayErrorSound == true {
+        if cueError.shouldPlayErrorSound {
             soundService.playError()
         }
 
-        state.session = .failed(failure)
-        logger.error("\(CueCopy.failureMessage(failure), privacy: .public)")
+        state.session = .failed(cueError)
+        logger.error("\(CueCopy.errorMessage(for: cueError), privacy: .public)")
     }
 }
 

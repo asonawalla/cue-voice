@@ -49,9 +49,4 @@ extension View {
                 )
         }
     }
-
-    @ViewBuilder
-    func popoverBackground() -> some View {
-        self.background(.regularMaterial)
-    }
 }

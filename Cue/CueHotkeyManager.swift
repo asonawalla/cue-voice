@@ -1,5 +1,4 @@
 import AppKit
-import Foundation
 import KeyboardShortcuts
 import Observation
 import os
@@ -15,17 +14,12 @@ extension KeyboardShortcuts.Name {
 
 protocol HotkeyBindingService: AnyObject {
     func currentShortcut() -> KeyboardShortcuts.Shortcut?
-    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?)
     func events() -> AsyncStream<KeyboardShortcuts.EventType>
 }
 
 final class LiveHotkeyBindingService: HotkeyBindingService {
     func currentShortcut() -> KeyboardShortcuts.Shortcut? {
         KeyboardShortcuts.getShortcut(for: .pushToTalk)
-    }
-
-    func setShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
-        KeyboardShortcuts.setShortcut(shortcut, for: .pushToTalk)
     }
 
     func events() -> AsyncStream<KeyboardShortcuts.EventType> {
@@ -38,17 +32,13 @@ final class LiveHotkeyBindingService: HotkeyBindingService {
 final class CueHotkeyManager {
     private(set) var shortcut: KeyboardShortcuts.Shortcut?
 
-    private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Hotkey")
+    private let logger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Hotkey")
     private let eventTask: Task<Void, Never>
-
-    private static let initializationFlagKey = "Cue.pushToTalkShortcutInitialized"
 
     init(
         appModel: CueAppModel,
-        defaults: UserDefaults = .standard,
-        bindingService: HotkeyBindingService? = nil
+        bindingService: HotkeyBindingService
     ) {
-        let bindingService = bindingService ?? LiveHotkeyBindingService()
         shortcut = nil
 
         let events = bindingService.events()
@@ -69,7 +59,6 @@ final class CueHotkeyManager {
             }
         }
 
-        initializeShortcutIfNeeded(defaults: defaults, bindingService: bindingService)
         shortcut = bindingService.currentShortcut()
     }
 
@@ -93,25 +82,4 @@ final class CueHotkeyManager {
     private static func describe(_ shortcut: KeyboardShortcuts.Shortcut?) -> String {
         shortcut?.description ?? "Not configured"
     }
-
-    private func initializeShortcutIfNeeded(
-        defaults: UserDefaults,
-        bindingService: HotkeyBindingService
-    ) {
-        guard !defaults.bool(forKey: Self.initializationFlagKey) else {
-            return
-        }
-
-        defer {
-            defaults.set(true, forKey: Self.initializationFlagKey)
-        }
-
-        guard bindingService.currentShortcut() == nil else {
-            return
-        }
-
-        bindingService.setShortcut(defaultPushToTalkShortcut)
-        logger.info("Initialized push-to-talk shortcut to the supported default")
-    }
-
 }

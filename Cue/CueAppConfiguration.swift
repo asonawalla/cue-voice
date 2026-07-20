@@ -6,7 +6,6 @@ enum CueAppConfiguration {
     nonisolated static let minimumRecordingDuration: TimeInterval = 0.35
     nonisolated static let cachedModelPathDefaultsKey = "Cue.cachedWhisperModelPath"
     nonisolated static let debugCapturesEnabledDefaultsKey = "Cue.debugCapturesEnabled"
-    nonisolated static let uiTestingLaunchArgument = "--ui-testing"
 
     nonisolated static func modelDownloadDirectory() -> URL {
         appDirectory(in: .applicationSupportDirectory)

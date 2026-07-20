@@ -8,254 +8,189 @@ private let noOpSleep: @Sendable (TimeInterval) async -> Void = { _ in }
 @MainActor
 struct PasteboardInsertionServiceTests {
     @Test func insertWithoutAccessibilityThrowsError() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 42,
                 localizedName: "Notes",
                 bundleIdentifier: "com.apple.Notes"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let poster = FakePasteCommandPoster()
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: poster,
-            hasAccessibilityPermission: { false },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        let service = rig.makeService(hasAccessibilityPermission: false)
 
         await #expect(throws: CueError.accessibilityPermissionDenied) {
             _ = try await service.insert("hello")
         }
 
-        #expect(pasteboard.writtenStrings.isEmpty)
-        #expect(pasteboard.currentPlainText == "before")
+        #expect(rig.pasteboard.writtenStrings.isEmpty)
+        #expect(rig.pasteboard.currentPlainText == "before")
     }
 
     @Test func insertWithoutFrontmostTargetThrowsError() async throws {
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let service = PasteboardInsertionService(
-            applicationResolver: FakeFrontmostApplicationResolver(application: nil),
-            pasteboard: pasteboard,
-            pasteCommandPoster: FakePasteCommandPoster(),
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        let rig = PasteboardInsertionTestRig(application: nil)
+        let service = rig.makeService()
 
         await #expect(throws: CueError.noFrontmostApplication) {
             _ = try await service.insert("hello")
         }
 
-        #expect(pasteboard.writtenStrings.isEmpty)
+        #expect(rig.pasteboard.writtenStrings.isEmpty)
     }
 
     @Test func insertWhenCueIsFrontmostThrowsError() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 7,
                 localizedName: "Cue",
                 bundleIdentifier: "dev.sonawalla.Cue"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: FakePasteCommandPoster(),
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        let service = rig.makeService()
 
         await #expect(throws: CueError.cannotPasteIntoCue) {
             _ = try await service.insert("hello")
         }
 
-        #expect(pasteboard.writtenStrings.isEmpty)
+        #expect(rig.pasteboard.writtenStrings.isEmpty)
     }
 
     @Test func posterFailureThrowsPasteErrorAndRestoresClipboard() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 9,
                 localizedName: "Slack",
                 bundleIdentifier: "com.tinyspeck.slackmacgap"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let poster = FakePasteCommandPoster()
-        poster.error = NSError(domain: "CueTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "event bridge down"])
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: poster,
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        rig.poster.error = NSError(domain: "CueTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "event bridge down"])
+        let service = rig.makeService()
 
         await #expect(throws: CueError.pasteFailed("event bridge down")) {
             _ = try await service.insert("hello")
         }
 
-        #expect(poster.postedProcessIdentifiers == [9])
-        #expect(pasteboard.writtenStrings == ["hello"])
-        #expect(pasteboard.restoreContentsCallCount == 1)
-        #expect(pasteboard.currentPlainText == "before")
+        #expect(rig.poster.postedProcessIdentifiers == [9])
+        #expect(rig.pasteboard.writtenStrings == ["hello"])
+        #expect(rig.pasteboard.restoreContentsCallCount == 1)
+        #expect(rig.pasteboard.currentPlainText == "before")
     }
 
     @Test func cuePosterFailurePreservesCueErrorMessageAndRestoresClipboard() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 10,
                 localizedName: "Notes",
                 bundleIdentifier: "com.apple.Notes"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let poster = FakePasteCommandPoster()
-        poster.error = CueError.pasteFailed("Cue could not synthesize the Command-V keyboard events.")
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: poster,
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        rig.poster.error = CueError.pasteFailed("Cue could not synthesize the Command-V keyboard events.")
+        let service = rig.makeService()
 
         await #expect(throws: CueError.pasteFailed("Cue could not synthesize the Command-V keyboard events.")) {
             _ = try await service.insert("hello")
         }
 
-        #expect(poster.postedProcessIdentifiers == [10])
-        #expect(pasteboard.writtenStrings == ["hello"])
-        #expect(pasteboard.restoreContentsCallCount == 1)
-        #expect(pasteboard.currentPlainText == "before")
+        #expect(rig.poster.postedProcessIdentifiers == [10])
+        #expect(rig.pasteboard.writtenStrings == ["hello"])
+        #expect(rig.pasteboard.restoreContentsCallCount == 1)
+        #expect(rig.pasteboard.currentPlainText == "before")
     }
 
     @Test func readyTargetPostsPasteCommandAndRestoresClipboard() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 12,
                 localizedName: "TextEdit",
                 bundleIdentifier: "com.apple.TextEdit"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let poster = FakePasteCommandPoster()
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: poster,
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        let service = rig.makeService()
 
         _ = try await service.insert("hello")
 
-        #expect(poster.postedProcessIdentifiers == [12])
-        #expect(pasteboard.writtenStrings == ["hello"])
-        #expect(pasteboard.restoreContentsCallCount == 1)
-        #expect(pasteboard.currentPlainText == "before")
+        #expect(rig.poster.postedProcessIdentifiers == [12])
+        #expect(rig.pasteboard.writtenStrings == ["hello"])
+        #expect(rig.pasteboard.restoreContentsCallCount == 1)
+        #expect(rig.pasteboard.currentPlainText == "before")
     }
 
     @Test func clipboardChangeDuringGraceWindowSkipsRestore() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 11,
                 localizedName: "Mail",
                 bundleIdentifier: "com.apple.mail"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: FakePasteCommandPoster(),
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
+        let service = rig.makeService(
             pasteRestoreGracePeriod: 0.2,
             sleepAfterPaste: { _ in
                 await MainActor.run {
-                    pasteboard.simulateExternalClipboardChange(text: "external clipboard")
+                    rig.pasteboard.simulateExternalClipboardChange(text: "external clipboard")
                 }
             }
         )
 
         _ = try await service.insert("hello")
 
-        #expect(pasteboard.restoreContentsCallCount == 0)
-        #expect(pasteboard.currentPlainText == "external clipboard")
+        #expect(rig.pasteboard.restoreContentsCallCount == 0)
+        #expect(rig.pasteboard.currentPlainText == "external clipboard")
     }
 
     @Test func snapshotFailureThrowsPasteErrorBeforeOverwrite() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 21,
                 localizedName: "Notes",
                 bundleIdentifier: "com.apple.Notes"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        pasteboard.snapshotError = CueError.pasteFailed("snapshot unavailable")
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: FakePasteCommandPoster(),
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        rig.pasteboard.snapshotError = CueError.pasteFailed("snapshot unavailable")
+        let service = rig.makeService()
 
         await #expect(throws: CueError.pasteFailed("Cue could not preserve the current clipboard contents.")) {
             _ = try await service.insert("hello")
         }
 
-        #expect(pasteboard.writtenStrings.isEmpty)
-        #expect(pasteboard.currentPlainText == "before")
+        #expect(rig.pasteboard.writtenStrings.isEmpty)
+        #expect(rig.pasteboard.currentPlainText == "before")
     }
 
     @Test func restoreFailureKeepsPasteSuccessfulAndLeavesTranscriptOnClipboard() async throws {
-        let resolver = FakeFrontmostApplicationResolver(
+        let rig = PasteboardInsertionTestRig(
             application: CueRunningApplication(
                 processIdentifier: 13,
                 localizedName: "Pages",
                 bundleIdentifier: "com.apple.iWork.Pages"
             )
         )
-        let pasteboard = FakePasteboardAccess(initialPlainText: "before")
-        pasteboard.restoreError = CueError.pasteFailed("restore write failed")
-        let service = PasteboardInsertionService(
-            applicationResolver: resolver,
-            pasteboard: pasteboard,
-            pasteCommandPoster: FakePasteCommandPoster(),
-            hasAccessibilityPermission: { true },
-            mainBundleIdentifier: "dev.sonawalla.Cue",
-            pasteRestoreGracePeriod: 0,
-            sleepAfterPaste: noOpSleep
-        )
+        rig.pasteboard.restoreError = CueError.pasteFailed("restore write failed")
+        let service = rig.makeService()
 
         _ = try await service.insert("hello")
 
-        #expect(pasteboard.restoreContentsCallCount == 1)
-        #expect(pasteboard.currentPlainText == "hello")
+        #expect(rig.pasteboard.restoreContentsCallCount == 1)
+        #expect(rig.pasteboard.currentPlainText == "hello")
     }
 }
 
 @MainActor
 struct SystemPasteboardAccessTests {
+    @Test func replaceWritesPlainTextAndPasteboardMetadata() throws {
+        let rawPasteboard = RawFakeSystemPasteboard(initialPlainText: "before")
+        let access = SystemPasteboardAccess(pasteboard: rawPasteboard)
+
+        let changeCount = try access.replaceContents(
+            with: "hello",
+            sourceBundleIdentifier: "dev.sonawalla.Cue"
+        )
+
+        #expect(changeCount == rawPasteboard.changeCount)
+        #expect(rawPasteboard.currentPlainText == "hello")
+        #expect(rawPasteboard.data(forType: .init("org.nspasteboard.TransientType")) == Data())
+        #expect(rawPasteboard.data(forType: .init("org.nspasteboard.AutoGeneratedType")) == Data())
+        #expect(rawPasteboard.string(forType: .init("org.nspasteboard.source")) == "dev.sonawalla.Cue")
+    }
+
     @Test func replaceFailureAfterClearRestoresPreviousClipboard() throws {
         let rawPasteboard = RawFakeSystemPasteboard(initialPlainText: "before")
         let access = SystemPasteboardAccess(pasteboard: rawPasteboard)
@@ -264,13 +199,11 @@ struct SystemPasteboardAccessTests {
         #expect(throws: CueError.pasteFailed("Cue could not write plain text to the system pasteboard.")) {
             _ = try access.replaceContents(
                 with: "hello",
-                ownershipToken: "token-1",
                 sourceBundleIdentifier: "dev.sonawalla.Cue"
             )
         }
 
         #expect(rawPasteboard.currentPlainText == "before")
-        #expect(rawPasteboard.currentOwnershipToken == nil)
     }
 
     @Test func restoreFailureAfterClearRestoresCueClipboard() throws {
@@ -278,7 +211,6 @@ struct SystemPasteboardAccessTests {
         let access = SystemPasteboardAccess(pasteboard: rawPasteboard)
         _ = try access.replaceContents(
             with: "hello",
-            ownershipToken: "token-2",
             sourceBundleIdentifier: "dev.sonawalla.Cue"
         )
         let originalSnapshot = cueSnapshot(withPlainText: "before")
@@ -286,11 +218,39 @@ struct SystemPasteboardAccessTests {
         rawPasteboard.failNextWrite = true
 
         #expect(throws: CueError.pasteFailed("Cue could not restore the previous clipboard contents.")) {
-            _ = try access.restoreContents(from: originalSnapshot)
+            try access.restoreContents(from: originalSnapshot)
         }
 
         #expect(rawPasteboard.currentPlainText == "hello")
-        #expect(rawPasteboard.currentOwnershipToken == "token-2")
+        #expect(rawPasteboard.string(forType: .init("org.nspasteboard.source")) == "dev.sonawalla.Cue")
+    }
+}
+
+@MainActor
+private final class PasteboardInsertionTestRig {
+    let pasteboard = FakePasteboardAccess(initialPlainText: "before")
+    let poster = FakePasteCommandPoster()
+
+    private let resolver: FakeFrontmostApplicationResolver
+
+    init(application: CueRunningApplication?) {
+        resolver = FakeFrontmostApplicationResolver(application: application)
+    }
+
+    func makeService(
+        hasAccessibilityPermission: Bool = true,
+        pasteRestoreGracePeriod: TimeInterval = 0,
+        sleepAfterPaste: @escaping @Sendable (TimeInterval) async -> Void = noOpSleep
+    ) -> PasteboardInsertionService {
+        PasteboardInsertionService(
+            applicationResolver: resolver,
+            pasteboard: pasteboard,
+            pasteCommandPoster: poster,
+            hasAccessibilityPermission: { hasAccessibilityPermission },
+            mainBundleIdentifier: CueAppConfiguration.bundleIdentifier,
+            pasteRestoreGracePeriod: pasteRestoreGracePeriod,
+            sleepAfterPaste: sleepAfterPaste
+        )
     }
 }
 
@@ -309,26 +269,16 @@ private final class FakeFrontmostApplicationResolver: FrontmostApplicationResolv
 
 @MainActor
 private final class FakePasteboardAccess: CuePasteboardAccessing {
-    private static let ownershipTokenType = NSPasteboard.PasteboardType("dev.sonawalla.Cue.pasteToken")
-    private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
-    private static let autoGeneratedType = NSPasteboard.PasteboardType("org.nspasteboard.AutoGeneratedType")
-    private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
-
-    var snapshotContentsCallCount = 0
-    var replaceContentsCallCount = 0
     var restoreContentsCallCount = 0
     var snapshotError: Error?
-    var replaceError: Error?
     var restoreError: Error?
     var writtenStrings: [String] = []
 
-    private(set) var currentSnapshot: CuePasteboardSnapshot
-    private(set) var currentChangeCount = 0
-    private(set) var currentOwnershipToken: String?
+    private var currentSnapshot: CuePasteboardSnapshot
+    private(set) var changeCount = 0
 
     init(initialPlainText: String) {
         currentSnapshot = Self.snapshot(withPlainText: initialPlainText)
-        currentOwnershipToken = Self.ownershipToken(in: currentSnapshot)
     }
 
     var currentPlainText: String? {
@@ -336,8 +286,6 @@ private final class FakePasteboardAccess: CuePasteboardAccessing {
     }
 
     func snapshotContents() throws -> CuePasteboardSnapshot {
-        snapshotContentsCallCount += 1
-
         if let snapshotError {
             throw snapshotError
         }
@@ -345,25 +293,14 @@ private final class FakePasteboardAccess: CuePasteboardAccessing {
         return currentSnapshot
     }
 
-    func replaceContents(with text: String, ownershipToken: String, sourceBundleIdentifier: String?) throws -> Int {
-        replaceContentsCallCount += 1
-
-        if let replaceError {
-            throw replaceError
-        }
-
+    func replaceContents(with text: String, sourceBundleIdentifier: String?) throws -> Int {
         writtenStrings.append(text)
-        currentSnapshot = Self.cueSnapshot(
-            withPlainText: text,
-            ownershipToken: ownershipToken,
-            sourceBundleIdentifier: sourceBundleIdentifier
-        )
-        currentOwnershipToken = ownershipToken
-        currentChangeCount += 1
-        return currentChangeCount
+        currentSnapshot = Self.snapshot(withPlainText: text)
+        changeCount += 1
+        return changeCount
     }
 
-    func restoreContents(from snapshot: CuePasteboardSnapshot) throws -> Int {
+    func restoreContents(from snapshot: CuePasteboardSnapshot) throws {
         restoreContentsCallCount += 1
 
         if let restoreError {
@@ -371,19 +308,12 @@ private final class FakePasteboardAccess: CuePasteboardAccessing {
         }
 
         currentSnapshot = snapshot
-        currentOwnershipToken = Self.ownershipToken(in: snapshot)
-        currentChangeCount += 1
-        return currentChangeCount
-    }
-
-    func currentOwnership() -> CuePasteboardOwnership {
-        CuePasteboardOwnership(changeCount: currentChangeCount, token: currentOwnershipToken)
+        changeCount += 1
     }
 
     func simulateExternalClipboardChange(text: String) {
         currentSnapshot = Self.snapshot(withPlainText: text)
-        currentOwnershipToken = nil
-        currentChangeCount += 1
+        changeCount += 1
     }
 
     private static func snapshot(withPlainText text: String) -> CuePasteboardSnapshot {
@@ -396,37 +326,6 @@ private final class FakePasteboardAccess: CuePasteboardAccessing {
                 )
             ]
         )
-    }
-
-    private static func cueSnapshot(
-        withPlainText text: String,
-        ownershipToken: String,
-        sourceBundleIdentifier: String?
-    ) -> CuePasteboardSnapshot {
-        var representations = [
-            CuePasteboardRepresentation(type: .string, data: Data(text.utf8)),
-            CuePasteboardRepresentation(type: transientType, data: Data()),
-            CuePasteboardRepresentation(type: autoGeneratedType, data: Data()),
-            CuePasteboardRepresentation(type: ownershipTokenType, data: Data(ownershipToken.utf8))
-        ]
-
-        if let sourceBundleIdentifier {
-            representations.append(
-                CuePasteboardRepresentation(type: sourceType, data: Data(sourceBundleIdentifier.utf8))
-            )
-        }
-
-        return CuePasteboardSnapshot(items: [CuePasteboardItemSnapshot(representations: representations)])
-    }
-
-    private static func ownershipToken(in snapshot: CuePasteboardSnapshot) -> String? {
-        for item in snapshot.items {
-            for representation in item.representations where representation.type == ownershipTokenType {
-                return String(data: representation.data, encoding: .utf8)
-            }
-        }
-
-        return nil
     }
 
     private static func plainText(in snapshot: CuePasteboardSnapshot) -> String? {
@@ -481,10 +380,6 @@ private final class RawFakeSystemPasteboard: RawSystemPasteboardAccessing {
         plainText(in: currentSnapshot)
     }
 
-    var currentOwnershipToken: String? {
-        ownershipToken(in: currentSnapshot)
-    }
-
     @discardableResult
     func clearContents() -> Int {
         currentSnapshot = CuePasteboardSnapshot(items: [])
@@ -503,14 +398,18 @@ private final class RawFakeSystemPasteboard: RawSystemPasteboardAccessing {
         return true
     }
 
-    func string(forType type: NSPasteboard.PasteboardType) -> String? {
+    func data(forType type: NSPasteboard.PasteboardType) -> Data? {
         for item in currentSnapshot.items {
             for representation in item.representations where representation.type == type {
-                return String(data: representation.data, encoding: .utf8)
+                return representation.data
             }
         }
 
         return nil
+    }
+
+    func string(forType type: NSPasteboard.PasteboardType) -> String? {
+        data(forType: type).flatMap { String(data: $0, encoding: .utf8) }
     }
 }
 
@@ -536,18 +435,6 @@ private func snapshot(from items: [NSPasteboardItem]) -> CuePasteboardSnapshot {
             )
         }
     )
-}
-
-private func ownershipToken(in snapshot: CuePasteboardSnapshot) -> String? {
-    let tokenType = NSPasteboard.PasteboardType("dev.sonawalla.Cue.pasteToken")
-
-    for item in snapshot.items {
-        for representation in item.representations where representation.type == tokenType {
-            return String(data: representation.data, encoding: .utf8)
-        }
-    }
-
-    return nil
 }
 
 private func plainText(in snapshot: CuePasteboardSnapshot) -> String? {

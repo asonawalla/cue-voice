@@ -6,24 +6,22 @@ import os
 typealias TranscriptionStatusHandler = @MainActor @Sendable (ModelPreparationStatus) -> Void
 
 nonisolated protocol TranscriptionService: AnyObject {
-    @MainActor var statusHandler: TranscriptionStatusHandler? { get set }
-
-    func prepareModel() async throws
+    func prepareModel(reportStatus: @escaping TranscriptionStatusHandler) async throws
     func startRecording() async throws
-    func stopRecording() async throws -> String
+    func stopRecording(saveDebugCapture: Bool) async throws -> String
 }
 
 @MainActor
 private final class ModelPreparationStatusReporter {
-    private let statusHandler: TranscriptionStatusHandler?
+    private let statusHandler: TranscriptionStatusHandler
     private var acceptsDownloadProgress = false
 
-    init(statusHandler: TranscriptionStatusHandler?) {
+    init(statusHandler: @escaping TranscriptionStatusHandler) {
         self.statusHandler = statusHandler
     }
 
     func report(_ status: ModelPreparationStatus) {
-        statusHandler?(status)
+        statusHandler(status)
     }
 
     func beginDownload() {
@@ -45,53 +43,58 @@ private final class ModelPreparationStatusReporter {
 }
 
 actor WhisperKitTranscriptionService: TranscriptionService {
-    @MainActor var statusHandler: TranscriptionStatusHandler?
-
     private static let ignoredTranscriptSentinels: Set<String> = [
         "[BLANK_AUDIO]"
     ]
 
     private let defaults: UserDefaults
+    private let modelDirectory: URL
     private let clientFactory: WhisperKitClientFactory
     private let debugCaptureStore: any DebugCaptureStoring
-    private let logger = Logger(subsystem: "dev.sonawalla.Cue", category: "Transcription")
+    private let logger = Logger(subsystem: CueAppConfiguration.bundleIdentifier, category: "Transcription")
 
     private var whisperKitClient: (any WhisperKitClient)?
-    private var recordingStartedAt: Date?
+    private var isRecording = false
 
     init(
-        defaults: UserDefaults = .standard,
-        clientFactory: (any WhisperKitClientFactory)? = nil,
-        debugCaptureStore: (any DebugCaptureStoring)? = nil
+        defaults: UserDefaults,
+        modelDirectory: URL,
+        clientFactory: any WhisperKitClientFactory,
+        debugCaptureStore: any DebugCaptureStoring
     ) {
         self.defaults = defaults
-        self.clientFactory = clientFactory ?? LiveWhisperKitClientFactory()
+        self.modelDirectory = modelDirectory
+        self.clientFactory = clientFactory
         self.debugCaptureStore = debugCaptureStore
-            ?? DebugCaptureStore(rootDirectory: CueAppConfiguration.debugCaptureRootDirectory())
     }
 
-    func prepareModel() async throws {
-        let statusHandler = await MainActor.run { self.statusHandler }
-        try await prepareModel(statusHandler: statusHandler)
+    static func live(
+        defaults: UserDefaults,
+        modelDirectory: URL,
+        debugCaptureDirectory: URL
+    ) -> WhisperKitTranscriptionService {
+        WhisperKitTranscriptionService(
+            defaults: defaults,
+            modelDirectory: modelDirectory,
+            clientFactory: LiveWhisperKitClientFactory(),
+            debugCaptureStore: DebugCaptureStore(rootDirectory: debugCaptureDirectory)
+        )
     }
 
-    func startRecording() async throws {
-        let statusHandler = await MainActor.run { self.statusHandler }
-        try await startRecording(statusHandler: statusHandler)
-    }
-
-    private func prepareModel(statusHandler: TranscriptionStatusHandler?) async throws {
+    func prepareModel(reportStatus: @escaping TranscriptionStatusHandler) async throws {
         let statusReporter = await MainActor.run {
-            ModelPreparationStatusReporter(statusHandler: statusHandler)
+            ModelPreparationStatusReporter(statusHandler: reportStatus)
         }
 
         if whisperKitClient != nil {
-            await statusReporter.report(.ready)
             return
         }
 
-        let modelDirectory = CueAppConfiguration.modelDownloadDirectory()
-        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        } catch {
+            throw CueError.modelDownloadFailed(error.localizedDescription)
+        }
 
         await statusReporter.report(.checkingCache)
 
@@ -112,7 +115,6 @@ actor WhisperKitTranscriptionService: TranscriptionService {
                 await statusReporter.finishDownload()
             } catch {
                 await statusReporter.finishDownload()
-                await statusReporter.report(.failed("Model download failed"))
                 throw CueError.modelDownloadFailed(error.localizedDescription)
             }
 
@@ -128,20 +130,16 @@ actor WhisperKitTranscriptionService: TranscriptionService {
                 modelFolder: modelFolder
             )
         } catch {
-            await statusReporter.report(.failed("Model load failed"))
             throw CueError.modelLoadFailed(error.localizedDescription)
         }
 
-        await statusReporter.report(.ready)
         logger.info("WhisperKit model \(CueAppConfiguration.modelID, privacy: .public) ready from \(modelFolder.path, privacy: .public)")
     }
 
-    private func startRecording(statusHandler: TranscriptionStatusHandler?) async throws {
-        guard recordingStartedAt == nil else {
+    func startRecording() async throws {
+        guard !isRecording else {
             throw CueError.recordingAlreadyInProgress
         }
-
-        try await prepareModel(statusHandler: statusHandler)
 
         guard let whisperKitClient else {
             throw CueError.transcriptionFailed("The WhisperKit pipeline was not available.")
@@ -149,7 +147,7 @@ actor WhisperKitTranscriptionService: TranscriptionService {
 
         do {
             try whisperKitClient.startRecording()
-            recordingStartedAt = Date()
+            isRecording = true
             logger.info("Recording started with WhisperKit audio processor")
         } catch let error as WhisperError {
             throw mapRecordingError(error)
@@ -158,17 +156,17 @@ actor WhisperKitTranscriptionService: TranscriptionService {
         }
     }
 
-    func stopRecording() async throws -> String {
+    func stopRecording(saveDebugCapture: Bool) async throws -> String {
         guard let whisperKitClient else {
             throw CueError.noRecordingInProgress
         }
 
-        guard recordingStartedAt != nil else {
+        guard isRecording else {
             throw CueError.noRecordingInProgress
         }
 
         whisperKitClient.stopRecording()
-        recordingStartedAt = nil
+        isRecording = false
 
         let audioSamples = whisperKitClient.audioSamples
         let sampleCount = audioSamples.count
@@ -185,14 +183,17 @@ actor WhisperKitTranscriptionService: TranscriptionService {
             )
         }
 
-        let debugCapture = await createDebugCaptureIfNeeded(audioSamples: audioSamples)
+        let debugCapture = createDebugCaptureIfNeeded(
+            audioSamples: audioSamples,
+            enabled: saveDebugCapture
+        )
 
         let results: [WhisperKitTranscriptionSegment]
 
         do {
             results = try await whisperKitClient.transcribe(audioSamples: audioSamples)
         } catch {
-            await saveDebugCaptureResult(
+            saveDebugCaptureResult(
                 for: debugCapture,
                 sampleCount: sampleCount,
                 recordingDuration: recordingDuration,
@@ -215,7 +216,7 @@ actor WhisperKitTranscriptionService: TranscriptionService {
             transcriptError = nil
         }
 
-        await saveDebugCaptureResult(
+        saveDebugCaptureResult(
             for: debugCapture,
             sampleCount: sampleCount,
             recordingDuration: recordingDuration,
@@ -257,13 +258,13 @@ actor WhisperKitTranscriptionService: TranscriptionService {
         return cachedModelFolder
     }
 
-    private func createDebugCaptureIfNeeded(audioSamples: [Float]) async -> URL? {
-        guard defaults.bool(forKey: CueAppConfiguration.debugCapturesEnabledDefaultsKey) else {
+    private func createDebugCaptureIfNeeded(audioSamples: [Float], enabled: Bool) -> URL? {
+        guard enabled else {
             return nil
         }
 
         do {
-            let capture = try await debugCaptureStore.createCapture(
+            let capture = try debugCaptureStore.createCapture(
                 audioSamples: audioSamples
             )
             logger.info("Saved debug capture audio to \(capture.path, privacy: .public)")
@@ -281,13 +282,13 @@ actor WhisperKitTranscriptionService: TranscriptionService {
         segments: [WhisperKitTranscriptionSegment],
         finalTranscript: String,
         errorMessage: String?
-    ) async {
+    ) {
         guard let capture else {
             return
         }
 
         do {
-            try await debugCaptureStore.saveResult(
+            try debugCaptureStore.saveResult(
                 for: capture,
                 sampleCount: sampleCount,
                 recordingDuration: recordingDuration,
@@ -324,7 +325,7 @@ nonisolated protocol WhisperKitClient: AnyObject {
     func transcribe(audioSamples: [Float]) async throws -> [WhisperKitTranscriptionSegment]
 }
 
-struct WhisperKitTranscriptionSegment: Sendable {
+struct WhisperKitTranscriptionSegment: Codable, Equatable, Sendable {
     let text: String
     let language: String?
     let modelLoadDuration: TimeInterval

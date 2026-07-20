@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1C4D5E6F708192A3B4C5D6E7 /* CueAccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */; };
 		2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */; };
 		9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* WhisperKit */; };
 /* End PBXBuildFile section */
@@ -20,27 +19,17 @@
 			remoteGlobalIDString = 05A71C922F5A93C3009A5F0F;
 			remoteInfo = Cue;
 		};
-		05A71CAB2F5A93C4009A5F0F /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 05A71C8B2F5A93C3009A5F0F /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 05A71C922F5A93C3009A5F0F;
-			remoteInfo = Cue;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		05A71C932F5A93C3009A5F0F /* Cue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cue.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A71CA02F5A93C4009A5F0F /* CueTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CueUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C4D5E6F708192A3B4C6 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D1 /* Project-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Base.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Debug.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Release.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Cue-Base.xcconfig"; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueTests-Base.xcconfig"; sourceTree = "<group>"; };
-		1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "CueUITests-Base.xcconfig"; sourceTree = "<group>"; };
-		1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cue/CueAccessibilityID.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,11 +41,6 @@
 		05A71CA32F5A93C4009A5F0F /* CueTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CueTests;
-			sourceTree = "<group>";
-		};
-		05A71CAD2F5A93C4009A5F0F /* CueUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CueUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -78,13 +62,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		05A71CA72F5A93C4009A5F0F /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -92,11 +69,9 @@
 			isa = PBXGroup;
 			children = (
 				1A2B3C4D5E6F708192A3B4C6 /* README.md */,
-				1C4D5E6F708192A3B4C5D6E6 /* CueAccessibilityID.swift */,
 				1A2B3C4D5E6F708192A3B4D0 /* Config */,
 				05A71C952F5A93C3009A5F0F /* Cue */,
 				05A71CA32F5A93C4009A5F0F /* CueTests */,
-				05A71CAD2F5A93C4009A5F0F /* CueUITests */,
 				05A71C942F5A93C3009A5F0F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -106,7 +81,6 @@
 			children = (
 				05A71C932F5A93C3009A5F0F /* Cue.app */,
 				05A71CA02F5A93C4009A5F0F /* CueTests.xctest */,
-				05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -116,7 +90,6 @@
 			children = (
 				1A2B3C4D5E6F708192A3B4D4 /* Cue-Base.xcconfig */,
 				1A2B3C4D5E6F708192A3B4D5 /* CueTests-Base.xcconfig */,
-				1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */,
 				1A2B3C4D5E6F708192A3B4D1 /* Project-Base.xcconfig */,
 				1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */,
 				1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */,
@@ -174,29 +147,6 @@
 			productReference = 05A71CA02F5A93C4009A5F0F /* CueTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		05A71CA92F5A93C4009A5F0F /* CueUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 05A71CBA2F5A93C4009A5F0F /* Build configuration list for PBXNativeTarget "CueUITests" */;
-			buildPhases = (
-				05A71CA62F5A93C4009A5F0F /* Sources */,
-				05A71CA72F5A93C4009A5F0F /* Frameworks */,
-				05A71CA82F5A93C4009A5F0F /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				05A71CAC2F5A93C4009A5F0F /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				05A71CAD2F5A93C4009A5F0F /* CueUITests */,
-			);
-			name = CueUITests;
-			packageProductDependencies = (
-			);
-			productName = CueUITests;
-			productReference = 05A71CAA2F5A93C4009A5F0F /* CueUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -211,10 +161,6 @@
 						CreatedOnToolsVersion = 26.3;
 					};
 					05A71C9F2F5A93C4009A5F0F = {
-						CreatedOnToolsVersion = 26.3;
-						TestTargetID = 05A71C922F5A93C3009A5F0F;
-					};
-					05A71CA92F5A93C4009A5F0F = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 05A71C922F5A93C3009A5F0F;
 					};
@@ -240,7 +186,6 @@
 			targets = (
 				05A71C922F5A93C3009A5F0F /* Cue */,
 				05A71C9F2F5A93C4009A5F0F /* CueTests */,
-				05A71CA92F5A93C4009A5F0F /* CueUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -254,13 +199,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		05A71C9E2F5A93C4009A5F0F /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		05A71CA82F5A93C4009A5F0F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -284,14 +222,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		05A71CA62F5A93C4009A5F0F /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1C4D5E6F708192A3B4C5D6E7 /* CueAccessibilityID.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -299,11 +229,6 @@
 			isa = PBXTargetDependency;
 			target = 05A71C922F5A93C3009A5F0F /* Cue */;
 			targetProxy = 05A71CA12F5A93C4009A5F0F /* PBXContainerItemProxy */;
-		};
-		05A71CAC2F5A93C4009A5F0F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 05A71C922F5A93C3009A5F0F /* Cue */;
-			targetProxy = 05A71CAB2F5A93C4009A5F0F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -442,20 +367,6 @@
 			};
 			name = Release;
 		};
-		05A71CBB2F5A93C4009A5F0F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */;
-			buildSettings = {
-			};
-			name = Debug;
-		};
-		05A71CBC2F5A93C4009A5F0F /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D6 /* CueUITests-Base.xcconfig */;
-			buildSettings = {
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -482,15 +393,6 @@
 			buildConfigurations = (
 				05A71CB82F5A93C4009A5F0F /* Debug */,
 				05A71CB92F5A93C4009A5F0F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		05A71CBA2F5A93C4009A5F0F /* Build configuration list for PBXNativeTarget "CueUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				05A71CBB2F5A93C4009A5F0F /* Debug */,
-				05A71CBC2F5A93C4009A5F0F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
