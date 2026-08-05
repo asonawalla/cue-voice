@@ -1,22 +1,12 @@
-# Cue Voice
+# Cue
 
-Cue is the fastest, most reliable way to write with your voice on MacOS.
+Cue is one local dictation loop for macOS:
 
-It's a dictation app that:
-- Doesn't require a subscription
-- Runs locally for speed and privacy
-- Consumes minimal resources
-- Exposes a minimal, well-tested feature set
-- Is MacOS native
+1. Hold `⌥Space`.
+2. Speak.
+3. Release.
+4. Cue transcribes with FluidAudio and NVIDIA Parakeet, then pastes at the cursor.
 
-This app is primarily for my personal use, which is why it will stay highly
-opinionaited.
+Cue has one model, one shortcut, and no settings. Transcripts replace the clipboard and are not stored. The app needs Microphone and Accessibility access; the first launch also downloads the Parakeet model.
 
-Realistically, there are plenty of dictation apps that meet the criteria above,
-and I could easily live with any of them. But I'm building Cue to explore two
-topics that interest me:
-
-1. The MacOS ecosystem. Making Cue awesome will require learning quite a bit
-   about Mac development best practices.
-2. Fine-tuning language models, as a possible future experiment rather than part
-   of Cue's current product surface.
+Speech recognition is powered by NVIDIA Parakeet and FluidAudio.

@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */; };
-		9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* WhisperKit */; };
+		9A1B2C3D4E5F60718293A4B5 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1B2C3D4E5F60718293A4B4 /* FluidAudio */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,7 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B3C4D5E6F708192A3B4C5D8 /* KeyboardShortcuts in Frameworks */,
-				9A1B2C3D4E5F60718293A4B5 /* WhisperKit in Frameworks */,
+				9A1B2C3D4E5F60718293A4B5 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,7 +118,7 @@
 			name = Cue;
 			packageProductDependencies = (
 				2B3C4D5E6F708192A3B4C5D7 /* KeyboardShortcuts */,
-				9A1B2C3D4E5F60718293A4B4 /* WhisperKit */,
+				9A1B2C3D4E5F60718293A4B4 /* FluidAudio */,
 			);
 			productName = Cue;
 			productReference = 05A71C932F5A93C3009A5F0F /* Cue.app */;
@@ -177,7 +177,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
-				9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05A71C942F5A93C3009A5F0F /* Products */;
@@ -408,12 +408,12 @@
 				minimumVersion = 1.9.4;
 			};
 		};
-		9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+		9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.16.0;
+				minimumVersion = 0.12.4;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -424,10 +424,10 @@
 			package = 2B3C4D5E6F708192A3B4C5D6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
 		};
-		9A1B2C3D4E5F60718293A4B4 /* WhisperKit */ = {
+		9A1B2C3D4E5F60718293A4B4 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "WhisperKit" */;
-			productName = WhisperKit;
+			package = 9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
