@@ -9,5 +9,21 @@ xcuserdata/
 DerivedData/
 .build/
 .swiftpm/
+build/
+*.app
+*.dSYM
+*.xcarchive
+*.xcresult
+
+# Local environment and signing credentials
+.direnv/
+.env
+.env.*
+!.env.example
+*.mobileprovision
+*.p12
+*.p8
+*.pem
 
 .agents
+.playwright-cli/
