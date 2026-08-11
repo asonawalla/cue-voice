@@ -99,4 +99,4 @@ Cue intentionally keeps one shortcut, one model, and one output path. Settings, 
 
 ## License
 
-Cue is available under the [MIT License](LICENSE). Its dependencies and speech-recognition model retain their own licenses; see [Third-party software and models](THIRD_PARTY_NOTICES.md).
+Cue is available under the [MIT License](LICENSE). [FluidAudio](https://github.com/FluidInference/FluidAudio), [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), and the downloaded [Parakeet model](https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml) retain their own licenses.
