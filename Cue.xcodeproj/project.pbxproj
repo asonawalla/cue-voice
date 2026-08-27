@@ -486,7 +486,7 @@
 			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.9.4;
+				minimumVersion = 3.0.1;
 			};
 		};
 		9A1B2C3D4E5F60718293A4B3 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
@@ -494,7 +494,7 @@
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.12.4;
+				minimumVersion = 0.15.6;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

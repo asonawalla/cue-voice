@@ -12,15 +12,29 @@ permissions:
 
 jobs:
   test:
+    name: Test (${{ matrix.configuration }}, Xcode ${{ matrix.xcode }})
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Debug
+          - Release
+        xcode:
+          - "26.3"
+          - default
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode ${{ matrix.xcode }}
+        if: matrix.xcode != 'default'
+        run: sudo xcode-select --switch "/Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer"
 
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Run tests
-        run: ./scripts/test.sh
+      - name: Run ${{ matrix.configuration }} tests
+        run: ./scripts/test.sh "${{ matrix.configuration }}"

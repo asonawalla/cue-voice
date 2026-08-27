@@ -13,10 +13,9 @@ Cue has one model and one shortcut. It runs speech recognition locally, keeps no
 
 - macOS 26.2 or later
 - Xcode 26.3 or later
+- A Mac with Apple silicon; Intel Macs are not supported
 - About 500 MB of free space for the speech-recognition model
 - An internet connection for the initial build dependencies and first model download
-
-Cue is currently tested on Apple silicon. Intel support has not been verified.
 
 ## Install from source
 

@@ -6,12 +6,14 @@ import Observation
 
 private let pushToTalk = KeyboardShortcuts.Name(
     "fixedPushToTalk",
-    default: .init(.space, modifiers: [.option])
+    initial: .init(.space, modifiers: [.option])
 )
 
 @MainActor
 @Observable
 final class Cue {
+    typealias PreparationProgressHandler = @MainActor @Sendable (String) -> Void
+
     enum Event: Sendable {
         case pressed
         case released
@@ -23,16 +25,16 @@ final class Cue {
     }
 
     enum Status: Equatable {
-        case preparing
+        case preparing(String)
         case ready
         case recording
         case transcribing
         case blocked(String)
     }
 
-    private(set) var status: Status = .preparing
+    private(set) var status: Status = .preparing("Checking Cue requirements…")
 
-    private let prepare: @MainActor () async throws -> Void
+    private let prepare: @MainActor (@escaping PreparationProgressHandler) async throws -> Void
     private let events: AsyncStream<Event>
     private let frontmostApplication: @MainActor () -> pid_t?
     private let startRecording: @MainActor () async throws -> Void
@@ -43,9 +45,10 @@ final class Cue {
     private var targetApplication: pid_t?
     private var transcription: Task<Void, Never>?
     private var isPrepared = false
+    private var preparationAttempt = 0
 
     init(
-        prepare: @escaping @MainActor () async throws -> Void,
+        prepare: @escaping @MainActor (@escaping PreparationProgressHandler) async throws -> Void,
         events: AsyncStream<Event>,
         frontmostApplication: @escaping @MainActor () -> pid_t?,
         startRecording: @escaping @MainActor () async throws -> Void,
@@ -68,14 +71,17 @@ final class Cue {
         let stoppedSound = NSSound(named: NSSound.Name("Bottle"))
 
         self.init(
-            prepare: {
+            prepare: { progress in
+                progress("Checking microphone access…")
                 guard await AVAudioApplication.requestRecordPermission() else {
                     throw Failure("Microphone access is required. Grant it in System Settings, then hold ⌥Space.")
                 }
+                progress("Checking accessibility access…")
                 guard CGRequestPostEventAccess() else {
                     throw Failure("Accessibility access is required. Grant it in System Settings, then hold ⌥Space.")
                 }
-                try await parakeet.prepare()
+                progress("Checking Parakeet model files…")
+                try await parakeet.prepare(progress: progress)
             },
             events: Self.hotkeyEvents(),
             frontmostApplication: {
@@ -120,9 +126,24 @@ final class Cue {
             return
         }
 
-        status = .preparing
+        preparationAttempt += 1
+        let attempt = preparationAttempt
+        status = .preparing("Checking Cue requirements…")
         do {
-            try await prepare()
+            try await prepare { [weak self] message in
+                guard
+                    let self,
+                    self.preparationAttempt == attempt,
+                    case .preparing = self.status
+                else {
+                    return
+                }
+
+                let nextStatus = Status.preparing(message)
+                if self.status != nextStatus {
+                    self.status = nextStatus
+                }
+            }
             isPrepared = true
             status = .ready
         } catch {
@@ -214,8 +235,8 @@ final class Cue {
 extension Cue.Status {
     var message: String {
         switch self {
-        case .preparing:
-            "Preparing Parakeet…"
+        case .preparing(let message):
+            message
         case .ready:
             "Ready — hold ⌥Space to dictate"
         case .recording:
@@ -246,11 +267,68 @@ private actor Parakeet {
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
 
-    func prepare() async throws {
-        let models = try await AsrModels.downloadAndLoad(version: .v3)
-        let manager = AsrManager(config: .default)
-        try await manager.initialize(models: models)
-        self.manager = manager
+    func prepare(progress: @escaping Cue.PreparationProgressHandler) async throws {
+        let (updates, continuation) = AsyncStream.makeStream(
+            of: DownloadProgress.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        let relay = Task { @MainActor in
+            for await update in updates {
+                progress(Self.progressMessage(for: update))
+            }
+        }
+
+        do {
+            let models = try await AsrModels.downloadAndLoad(
+                version: .v3,
+                progressHandler: { continuation.yield($0) }
+            )
+            continuation.finish()
+            await relay.value
+            manager = AsrManager(config: .default, models: models)
+        } catch {
+            continuation.finish()
+            await relay.value
+            throw error
+        }
+    }
+
+    private nonisolated static func progressMessage(for progress: DownloadProgress) -> String {
+        switch progress.phase {
+        case .listing:
+            "Checking Parakeet model files…"
+        case .downloading(let completedFiles, let totalFiles):
+            if totalFiles == 0 {
+                "Loading cached Parakeet models…"
+            } else {
+                "Downloading Parakeet model files (\(completedFiles) of \(totalFiles))…"
+            }
+        case .compiling(let modelName):
+            loadingMessage(for: modelName)
+        @unknown default:
+            "Preparing Parakeet models…"
+        }
+    }
+
+    private nonisolated static func loadingMessage(for modelName: String) -> String {
+        let model = URL(fileURLWithPath: modelName).deletingPathExtension().lastPathComponent
+        guard !model.isEmpty else {
+            return "Finishing Parakeet setup…"
+        }
+
+        let component: String
+        switch model.lowercased() {
+        case let name where name.contains("preprocessor"):
+            component = "Preprocessor"
+        case let name where name.contains("encoder"):
+            component = "Encoder"
+        case let name where name.contains("jointdecision"):
+            component = "Decoder"
+        default:
+            component = model
+        }
+
+        return "Loading Parakeet \(component)…"
     }
 
     func startRecording() throws {
@@ -292,7 +370,9 @@ private actor Parakeet {
         self.recordingURL = nil
         defer { try? FileManager.default.removeItem(at: recordingURL) }
 
-        return try await manager.transcribe(recordingURL, source: .microphone).text
+        let decoderLayers = await manager.decoderLayerCount
+        var decoderState = try TdtDecoderState(decoderLayers: decoderLayers)
+        return try await manager.transcribe(recordingURL, decoderState: &decoderState).text
     }
 }
 
