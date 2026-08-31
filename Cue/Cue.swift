@@ -74,11 +74,11 @@ final class Cue {
             prepare: { progress in
                 progress("Checking microphone access…")
                 guard await AVAudioApplication.requestRecordPermission() else {
-                    throw Failure("Microphone access is required. Grant it in System Settings, then hold ⌥Space.")
+                    throw Failure(errorDescription: "Microphone access is required. Grant it in System Settings, then hold ⌥Space.")
                 }
                 progress("Checking accessibility access…")
                 guard CGRequestPostEventAccess() else {
-                    throw Failure("Accessibility access is required. Grant it in System Settings, then hold ⌥Space.")
+                    throw Failure(errorDescription: "Accessibility access is required. Grant it in System Settings, then hold ⌥Space.")
                 }
                 progress("Checking Parakeet model files…")
                 try await parakeet.prepare(progress: progress)
@@ -209,7 +209,7 @@ final class Cue {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else {
-            throw Failure("Cue could not copy the transcript.")
+            throw Failure(errorDescription: "Cue could not copy the transcript.")
         }
 
         guard
@@ -219,7 +219,7 @@ final class Cue {
             let vUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false),
             let commandUp = CGEvent(keyboardEventSource: source, virtualKey: 55, keyDown: false)
         else {
-            throw Failure("Cue copied the transcript but could not paste it.")
+            throw Failure(errorDescription: "Cue copied the transcript but could not paste it.")
         }
 
         commandDown.flags = .maskCommand
@@ -333,7 +333,7 @@ private actor Parakeet {
 
     func startRecording() throws {
         guard manager != nil, recorder == nil else {
-            throw Failure("Parakeet is not ready.")
+            throw Failure(errorDescription: "Parakeet is not ready.")
         }
 
         let url = FileManager.default.temporaryDirectory
@@ -353,7 +353,7 @@ private actor Parakeet {
 
         recorder.prepareToRecord()
         guard recorder.record() else {
-            throw Failure("Cue could not start recording.")
+            throw Failure(errorDescription: "Cue could not start recording.")
         }
 
         self.recorder = recorder
@@ -362,7 +362,7 @@ private actor Parakeet {
 
     func stopRecording() async throws -> String {
         guard let manager, let recorder, let recordingURL else {
-            throw Failure("Cue was not recording.")
+            throw Failure(errorDescription: "Cue was not recording.")
         }
 
         recorder.stop()
@@ -378,8 +378,4 @@ private actor Parakeet {
 
 private struct Failure: LocalizedError {
     let errorDescription: String?
-
-    init(_ message: String) {
-        errorDescription = message
-    }
 }
