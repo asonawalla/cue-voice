@@ -265,7 +265,6 @@ extension Cue.Status {
 private actor Parakeet {
     private var manager: AsrManager?
     private var recorder: AVAudioRecorder?
-    private var recordingURL: URL?
 
     func prepare(progress: @escaping Cue.PreparationProgressHandler) async throws {
         let (updates, continuation) = AsyncStream.makeStream(
@@ -357,22 +356,20 @@ private actor Parakeet {
         }
 
         self.recorder = recorder
-        recordingURL = url
     }
 
     func stopRecording() async throws -> String {
-        guard let manager, let recorder, let recordingURL else {
+        guard let manager, let recorder else {
             throw Failure(errorDescription: "Cue was not recording.")
         }
 
         recorder.stop()
         self.recorder = nil
-        self.recordingURL = nil
-        defer { try? FileManager.default.removeItem(at: recordingURL) }
+        defer { recorder.deleteRecording() }
 
         let decoderLayers = await manager.decoderLayerCount
         var decoderState = try TdtDecoderState(decoderLayers: decoderLayers)
-        return try await manager.transcribe(recordingURL, decoderState: &decoderState).text
+        return try await manager.transcribe(recorder.url, decoderState: &decoderState).text
     }
 }
 
