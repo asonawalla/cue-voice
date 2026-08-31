@@ -16,7 +16,7 @@ struct CueTests {
                 if preparationAttempts == 1 {
                     firstAttemptProgress = progress
                     progress("Downloading Parakeet model files (1 of 3)…")
-                    throw TestFailure("prepare failed")
+                    throw TestFailure(errorDescription: "prepare failed")
                 }
             },
             events: events,
@@ -56,7 +56,7 @@ struct CueTests {
             startRecording: {
                 recordingAttempts += 1
                 if recordingAttempts == 1 {
-                    throw TestFailure("recording failed")
+                    throw TestFailure(errorDescription: "recording failed")
                 }
             },
             stopRecording: { "" },
@@ -177,10 +177,6 @@ struct CueTests {
 
     private struct TestFailure: LocalizedError {
         let errorDescription: String?
-
-        init(_ message: String) {
-            errorDescription = message
-        }
     }
 
     private func expectEventually(
