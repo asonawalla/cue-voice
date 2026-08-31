@@ -1,11 +1,12 @@
 import Foundation
+import KeyboardShortcuts
 import Testing
 @testable import Cue
 
 @MainActor
 struct CueTests {
     @Test func nextPressRetriesFailedPreparation() async {
-        let (events, continuation) = AsyncStream<Cue.Event>.makeStream()
+        let (events, continuation) = AsyncStream<Cue.EventType>.makeStream()
         var preparationAttempts = 0
         var recordingAttempts = 0
         var firstAttemptProgress: Cue.PreparationProgressHandler?
@@ -30,7 +31,7 @@ struct CueTests {
         let run = Task { await cue.run() }
 
         await expectEventually { cue.status == .blocked("prepare failed") }
-        continuation.yield(.pressed)
+        continuation.yield(.keyDown)
         await expectEventually {
             cue.status == .recording
                 && preparationAttempts == 2
@@ -38,14 +39,14 @@ struct CueTests {
         }
         firstAttemptProgress?("Late update from the failed attempt")
         #expect(cue.status == .recording)
-        continuation.yield(.released)
+        continuation.yield(.keyUp)
         await expectEventually { cue.status == .ready }
         continuation.finish()
         await run.value
     }
 
     @Test func nextPressRetriesRuntimeFailureWithoutPreparingAgain() async {
-        let (events, continuation) = AsyncStream<Cue.Event>.makeStream()
+        let (events, continuation) = AsyncStream<Cue.EventType>.makeStream()
         var preparationAttempts = 0
         var recordingAttempts = 0
 
@@ -67,22 +68,22 @@ struct CueTests {
         let run = Task { await cue.run() }
 
         await expectEventually { cue.status == .ready }
-        continuation.yield(.pressed)
+        continuation.yield(.keyDown)
         await expectEventually { cue.status == .blocked("recording failed") }
-        continuation.yield(.pressed)
+        continuation.yield(.keyDown)
         await expectEventually {
             cue.status == .recording
                 && preparationAttempts == 1
                 && recordingAttempts == 2
         }
-        continuation.yield(.released)
+        continuation.yield(.keyUp)
         await expectEventually { cue.status == .ready }
         continuation.finish()
         await run.value
     }
 
     @Test func pressAndReleasePastesOneTranscriptIntoTheCapturedApplication() async {
-        let (events, continuation) = AsyncStream<Cue.Event>.makeStream()
+        let (events, continuation) = AsyncStream<Cue.EventType>.makeStream()
         var calls: [String] = []
 
         let cue = Cue(
@@ -112,9 +113,9 @@ struct CueTests {
         let run = Task { await cue.run() }
 
         await expectEventually { cue.status == .ready }
-        continuation.yield(.pressed)
+        continuation.yield(.keyDown)
         await expectEventually { cue.status == .recording }
-        continuation.yield(.released)
+        continuation.yield(.keyUp)
         await expectEventually { cue.status == .ready && calls.count == 7 }
         continuation.finish()
         await run.value
@@ -131,7 +132,7 @@ struct CueTests {
     }
 
     @Test func preparationProgressIsVisibleAndLateUpdatesDoNotRegressReady() async {
-        let (events, eventContinuation) = AsyncStream<Cue.Event>.makeStream()
+        let (events, eventContinuation) = AsyncStream<Cue.EventType>.makeStream()
         var advanceFromChecking: CheckedContinuation<Void, Never>?
         var advanceFromDownloading: CheckedContinuation<Void, Never>?
         var capturedProgress: Cue.PreparationProgressHandler?

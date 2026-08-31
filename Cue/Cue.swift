@@ -4,20 +4,13 @@ import FluidAudio
 import KeyboardShortcuts
 import Observation
 
-private let pushToTalk = KeyboardShortcuts.Name(
-    "fixedPushToTalk",
-    initial: .init(.space, modifiers: [.option])
-)
+private let pushToTalk = KeyboardShortcuts.Shortcut(.space, modifiers: [.option])
 
 @MainActor
 @Observable
 final class Cue {
     typealias PreparationProgressHandler = @MainActor @Sendable (String) -> Void
-
-    enum Event: Sendable {
-        case pressed
-        case released
-    }
+    typealias EventType = KeyboardShortcuts.EventType
 
     enum Signal: Equatable {
         case started
@@ -35,7 +28,7 @@ final class Cue {
     private(set) var status: Status = .preparing("Checking Cue requirements…")
 
     private let prepare: @MainActor (@escaping PreparationProgressHandler) async throws -> Void
-    private let events: AsyncStream<Event>
+    private let events: AsyncStream<EventType>
     private let frontmostApplication: @MainActor () -> pid_t?
     private let startRecording: @MainActor () async throws -> Void
     private let stopRecording: @MainActor () async throws -> String
@@ -49,7 +42,7 @@ final class Cue {
 
     init(
         prepare: @escaping @MainActor (@escaping PreparationProgressHandler) async throws -> Void,
-        events: AsyncStream<Event>,
+        events: AsyncStream<EventType>,
         frontmostApplication: @escaping @MainActor () -> pid_t?,
         startRecording: @escaping @MainActor () async throws -> Void,
         stopRecording: @escaping @MainActor () async throws -> String,
@@ -83,7 +76,7 @@ final class Cue {
                 progress("Checking Parakeet model files…")
                 try await parakeet.prepare(progress: progress)
             },
-            events: Self.hotkeyEvents(),
+            events: KeyboardShortcuts.events(for: pushToTalk),
             frontmostApplication: {
                 NSWorkspace.shared.frontmostApplication?.processIdentifier
             },
@@ -107,12 +100,12 @@ final class Cue {
 
         for await event in events {
             switch event {
-            case .pressed:
+            case .keyDown:
                 if case .blocked = status {
                     await prepareIfNeeded()
                 }
                 await beginDictation()
-            case .released:
+            case .keyUp:
                 endDictation()
             }
         }
@@ -190,18 +183,6 @@ final class Cue {
             status = .ready
         } catch {
             status = .blocked(error.localizedDescription)
-        }
-    }
-
-    private static func hotkeyEvents() -> AsyncStream<Event> {
-        AsyncStream { continuation in
-            let task = Task { @MainActor in
-                for await event in KeyboardShortcuts.events(for: pushToTalk) {
-                    continuation.yield(event == .keyDown ? .pressed : .released)
-                }
-                continuation.finish()
-            }
-            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
