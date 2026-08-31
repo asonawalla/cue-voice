@@ -20,9 +20,7 @@ struct CueApp: App {
         } label: {
             if cue.status == .ready {
                 Image("MenuBarRibbonQ")
-                    .renderingMode(.template)
                     .resizable()
-                    .scaledToFit()
                     .frame(width: 18, height: 18)
                     .accessibilityLabel(cue.status.message)
             } else {
