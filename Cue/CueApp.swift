@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -47,9 +48,9 @@ private struct CueMenu: View {
                     set: { launchAtLogin.setEnabled($0) }
                 )
             )
-            if launchAtLogin.requiresApproval {
+            if launchAtLogin.status == .requiresApproval {
                 Button("Approve Login Item in System Settings…") {
-                    launchAtLogin.openApprovalSettings()
+                    SMAppService.openSystemSettingsLoginItems()
                 }
             }
             if let errorMessage = launchAtLogin.errorMessage {

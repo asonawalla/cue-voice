@@ -214,33 +214,18 @@ final class Cue {
 }
 
 extension Cue.Status {
-    var message: String {
+    private var presentation: (message: String, symbolName: String) {
         switch self {
-        case .preparing(let message):
-            message
-        case .ready:
-            "Ready — hold ⌥Space to dictate"
-        case .recording:
-            "Recording…"
-        case .transcribing:
-            "Transcribing…"
-        case .blocked(let message):
-            message
+        case .preparing(let message): (message, "ellipsis")
+        case .ready: ("Ready — hold ⌥Space to dictate", "waveform")
+        case .recording: ("Recording…", "record.circle.fill")
+        case .transcribing: ("Transcribing…", "ellipsis")
+        case .blocked(let message): (message, "exclamationmark.triangle")
         }
     }
 
-    var symbolName: String {
-        switch self {
-        case .preparing, .transcribing:
-            "ellipsis"
-        case .ready:
-            "waveform"
-        case .recording:
-            "record.circle.fill"
-        case .blocked:
-            "exclamationmark.triangle"
-        }
-    }
+    var message: String { presentation.message }
+    var symbolName: String { presentation.symbolName }
 }
 
 private actor Parakeet {

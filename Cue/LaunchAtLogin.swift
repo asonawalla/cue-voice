@@ -4,25 +4,15 @@ import ServiceManagement
 @MainActor
 @Observable
 final class LaunchAtLogin {
-    private let service = SMAppService.mainApp
-
-    private(set) var status: SMAppService.Status
+    private(set) var status = SMAppService.mainApp.status
     private(set) var errorMessage: String?
-
-    init() {
-        status = service.status
-    }
 
     var isRegistered: Bool {
         status == .enabled || status == .requiresApproval
     }
 
-    var requiresApproval: Bool {
-        status == .requiresApproval
-    }
-
     func refresh() {
-        status = service.status
+        status = SMAppService.mainApp.status
     }
 
     func setEnabled(_ isEnabled: Bool) {
@@ -30,18 +20,14 @@ final class LaunchAtLogin {
 
         do {
             if isEnabled {
-                try service.register()
+                try SMAppService.mainApp.register()
             } else {
-                try service.unregister()
+                try SMAppService.mainApp.unregister()
             }
         } catch {
             errorMessage = "Cue could not update Launch at Login: \(error.localizedDescription)"
         }
 
         refresh()
-    }
-
-    func openApprovalSettings() {
-        SMAppService.openSystemSettingsLoginItems()
     }
 }

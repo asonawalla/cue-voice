@@ -309,13 +309,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D2 /* Project-Debug.xcconfig */;
 			buildSettings = {
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 			};
 			name = Debug;
 		};
@@ -323,7 +316,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1A2B3C4D5E6F708192A3B4D3 /* Project-Release.xcconfig */;
 			buildSettings = {
-				MTL_ENABLE_DEBUG_INFO = NO;
 			};
 			name = Release;
 		};
